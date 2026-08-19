@@ -1,6 +1,6 @@
 # BridgeTool
 
-BridgeTool is a private hobby project for defining, checking, practising, and
+BridgeTool is a personal hobby project for defining, checking, practising, and
 comparing contract-bridge bidding systems. The project is currently in **stage
 0**: establishing a reproducible baseline and a simple local development
 environment. The custom BridgeTool bidding system is not implemented yet.
@@ -14,6 +14,30 @@ Apache-2.0 license, and BBA/EPBot submodule are retained.
 - [Preliminary, non-executable system draft](docs/SYSTEM_DRAFT.md)
 - [Pons bidding architecture](docs/bidding-architecture.md)
 - [Pons measurement playbook](docs/measurement.md)
+
+## Local development
+
+BridgeTool requires [Rust](https://www.rust-lang.org/tools/install) 1.93 or
+later. On Windows, the native DDS build also requires a working MSVC/C++
+toolchain. After cloning, initialize the submodules:
+
+```powershell
+git submodule update --init --recursive
+```
+
+Git remotes are local configuration and are not included in a clone. Add Pons
+as `upstream` in each new clone, then verify the remotes:
+
+```powershell
+git remote add upstream https://github.com/jdh8/pons.git
+git remote -v
+```
+
+From the repository root, run the local verification suite with:
+
+```powershell
+.\scripts\check.ps1
+```
 
 ## Pons engine
 

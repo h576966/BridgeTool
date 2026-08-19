@@ -2,7 +2,7 @@
 
 ## Purpose
 
-BridgeTool is a private hobby project for a single developer. Its long-term
+BridgeTool is a personal hobby project for a single developer. Its long-term
 purpose is to define custom bridge bidding systems, select separate systems for
 NS and EW, inspect coverage, overlap, and bidding frequencies, practise against
 robots, and compare systems or conventions through reproducible experiments.
@@ -43,6 +43,10 @@ changes with `git fetch upstream`, inspect them, and merge `upstream/main` into
 BridgeTool's `main` without rewriting published history. Keep BridgeTool changes
 small and isolated so conflicts remain easy to review. Preserve upstream
 attribution, the Apache-2.0 license, and the BBA submodule.
+
+Git remotes are local configuration and are not versioned. Add Pons in each new
+clone with `git remote add upstream https://github.com/jdh8/pons.git`, then
+confirm the configuration with `git remote -v`.
 
 ## Stages
 

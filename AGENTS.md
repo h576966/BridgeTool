@@ -2,7 +2,7 @@
 
 ## Project and working style
 
-- This is a private hobby project for one developer. Prefer the simplest
+- This is a personal hobby project for one developer. Prefer the simplest
   solution that meets the current need.
 - Avoid enterprise architecture, unnecessary abstractions, placeholder
   modules, and new dependencies without a concrete need.
@@ -41,15 +41,19 @@
 
 ## Verification
 
-Run the relevant Pons checks before delivery:
+Windows/PowerShell users should normally run:
 
-```text
-cargo fmt --check
-cargo test --all-features
-cargo clippy --all-targets --all-features -- -D warnings
-RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --all-features
+```powershell
+.\scripts\check.ps1
 ```
 
-Run `cd web && cargo test` when the web module or public API changes. If an
-upstream check already fails, distinguish an environment problem from a code
-failure, document it, and do not make unrelated changes to hide it.
+The script runs the relevant Pons checks before delivery:
+
+- `cargo fmt --check`
+- `cargo test --all-features`
+- `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo doc --no-deps --all-features` with `RUSTDOCFLAGS=-D warnings`
+- `cargo test` from `web/`
+
+If an upstream check already fails, distinguish an environment problem from a
+code failure, document it, and do not make unrelated changes to hide it.
