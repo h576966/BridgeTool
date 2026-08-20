@@ -10,6 +10,8 @@ pub mod array;
 pub mod benchmark;
 /// Role-aware partnership books
 pub mod book;
+/// Isolated audits for the proposed BridgeTool bidding system
+pub mod bridge_tool;
 /// `.bbsa` convention cards generated from the live system
 pub mod card;
 /// System-independent build helpers shared across bidding systems
