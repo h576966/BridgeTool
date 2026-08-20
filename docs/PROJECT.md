@@ -29,9 +29,10 @@ its Git history intact and remains the core crate and engine.
 - **DDS:** native double-dummy analysis used by tests, examples, and scoring.
 - **BBA/EPBot adapter:** the pinned `vendor/bba` submodule and Pons examples for
   comparison with an external reference bidder.
-- **WebAssembly web app:** the existing local, client-side Pons interface for
-  practice, demos, book inspection, deal editing, separate NS/EW profiles, and
-  read-only inspection of the provisional BridgeTool opening audit.
+- **WebAssembly web app:** the existing local, client-side interface with an
+  explicit app-global choice between fully playable Pons American and the
+  opening-only BridgeTool Draft. Pons retains separate NS/EW convention
+  profiles; Draft exposes only read-only opening inspection.
 - **Future BridgeTool system module:** the custom system, added only after its
   meanings and priorities are precise enough to implement and test.
 - **Future analysis and experiment tools:** coverage, overlap, frequency, and
@@ -57,7 +58,8 @@ confirm the configuration with `git remote -v`.
 4. **Stage 3:** competitive bidding and defenses.
 5. **Stage 4:** paired A/B experiments against the standard system and
    BBA/EPBot.
-6. **Stage 5:** improved local web app and separate NS/EW profiles.
+6. **Stage 5:** improved local web app, separate NS/EW Pons profiles, and an
+   honest app-level boundary between Pons American and BridgeTool Draft.
 7. **Stage 6:** possible data file or DSL for bidding systems, only if
    system-as-code proves impractical.
 

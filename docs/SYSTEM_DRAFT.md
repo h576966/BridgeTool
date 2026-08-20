@@ -2,8 +2,9 @@
 
 > This remains a preliminary discussion document, not a complete executable
 > bidding system. The isolated opening audit below is implemented in Rust and
-> exposed as a read-only web view, but it is not wired into Pons rules,
-> inference, responses, rebids, or competitive auctions.
+> exposed under the app's BridgeTool Draft profile as a read-only web view, but
+> it is not wired into Pons rules, inference, responses, rebids, or competitive
+> auctions.
 
 ## Implemented opening audit
 
@@ -67,8 +68,12 @@ The [probe program](../examples/probe-bridge-openings/main.rs) records its
 version, seed, and hand count; reports eligibility, selection, gaps, overlaps,
 and exception candidates; and retains only three sample hands per category.
 The web app's Opening Audit view calls the same pure classifier through a thin
-WASM JSON wrapper. It does not change the American system used by Practice or
-Demo.
+WASM JSON wrapper. The app-level selector keeps **Pons American** (complete
+Practice, Demo, and authored Book behavior) separate from **BridgeTool Draft**
+(opening analysis only). In Draft mode, Practice and Demo show an unsupported
+status instead of silently running Pons, Book states that no Draft book exists,
+and the Pons-only Edit-to-Demo action is disabled. The selector does not add
+unfinished continuations or change the Pons `Agreements` profiles.
 
 ## Preliminary continuation after 1♥
 

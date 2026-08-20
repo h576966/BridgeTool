@@ -30,6 +30,19 @@ fn opening_audit_reports_selected_opening() {
 }
 
 #[test]
+fn opening_audit_selects_weak_notrump_with_three_three_majors() {
+    let json = parse(&opening_audit("AQ3.KJ2.J43.Q432"));
+    let audit = &json["audit"];
+
+    assert_eq!(audit["hand"]["hcp"], 13);
+    assert_eq!(audit["suits"][0]["length"], 3, "three spades");
+    assert_eq!(audit["suits"][1]["length"], 3, "three hearts");
+    assert_eq!(audit["eligible_openings"], serde_json::json!(["1NT"]));
+    assert_eq!(audit["selection"]["kind"], "selected");
+    assert_eq!(audit["selection"]["openings"], serde_json::json!(["1NT"]));
+}
+
+#[test]
 fn opening_audit_preserves_ambiguity() {
     let json = parse(&opening_audit("AKQ2.3.KQJ2.8765"));
     let audit = &json["audit"];
@@ -359,6 +372,30 @@ fn registry_is_well_formed() {
             _ => panic!("{} requires {spec}, wrong form for that row", setting.key()),
         }
     }
+}
+
+#[test]
+fn web_shell_keeps_system_identity_outside_pons_settings() {
+    let html = include_str!("../index.html");
+    let app = include_str!("../app.js");
+    let registry = describe_options();
+
+    assert!(
+        html.contains("<option value=\"pons-american\" selected>Pons American</option>"),
+        "Pons American remains the app default"
+    );
+    assert!(
+        html.contains("<option value=\"bridge-tool-draft\">BridgeTool Draft</option>"),
+        "the opening-only Draft is an explicit profile"
+    );
+    assert!(
+        app.contains("const SYSTEM_STORAGE_KEY = 'bridgetool-system-profile';"),
+        "system identity has its own persistence key"
+    );
+    assert!(
+        !registry.contains("bridgetool-system-profile") && !registry.contains("bridge-tool-draft"),
+        "system identity must not become an Agreements knob"
+    );
 }
 
 /// Every registry `default` must mirror [`Agreements::default`].
