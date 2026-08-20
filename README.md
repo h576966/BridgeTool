@@ -1,9 +1,9 @@
 # BridgeTool
 
 BridgeTool is a personal hobby project for defining, checking, practising, and
-comparing contract-bridge bidding systems. The project is currently in **stage
-0**: establishing a reproducible baseline and a simple local development
-environment. The custom BridgeTool bidding system is not implemented yet.
+comparing contract-bridge bidding systems. It includes the original Pons
+American system and a playable **PEN-Club** draft: precise source-backed calls
+are authored explicitly and a deterministic fallback completes other auctions.
 
 BridgeTool is built directly on [Pons](https://github.com/jdh8/pons), with its
 Git history preserved. Pons remains the core engine and Rust crate name. The
@@ -11,7 +11,7 @@ original engine, tests, examples, documentation, WebAssembly app, CI workflows,
 Apache-2.0 license, and BBA/EPBot submodule are retained.
 
 - [Project scope and roadmap](docs/PROJECT.md)
-- [Preliminary, non-executable system draft](docs/SYSTEM_DRAFT.md)
+- [PEN-Club playable system draft](docs/SYSTEM_DRAFT.md)
 - [Pons bidding architecture](docs/bidding-architecture.md)
 - [Pons measurement playbook](docs/measurement.md)
 

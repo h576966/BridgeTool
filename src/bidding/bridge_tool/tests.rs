@@ -120,6 +120,12 @@ fn both_one_spade_variants_are_eligible() {
 }
 
 #[test]
+fn minor_two_suiter_one_spade_denies_a_four_card_major() {
+    assert!(!is_eligible("AKQ2.3.KQJ2.8765", Opening::OneSpade));
+    assert!(!is_eligible("3.AKQ2.KQJ2.8765", Opening::OneSpade));
+}
+
+#[test]
 fn one_club_excludes_only_the_qualifying_strong_club_variant() {
     let qualifying = "32.Q3.AK2.AKQJ87";
     assert_eq!(eligible_openings(hand(qualifying)), vec![Opening::OneSpade]);
@@ -143,28 +149,28 @@ fn major_openings_allow_a_longer_side_suit() {
 }
 
 #[test]
-fn basic_minor_openings_require_every_side_suit_to_be_shorter_than_four() {
-    assert!(is_eligible("432.432.32.AKQJ8", Opening::TwoClubs));
-    assert!(is_eligible("432.432.AKQJ8.32", Opening::TwoDiamonds));
+fn long_minor_openings_allow_exactly_four_of_the_other_minor() {
+    assert!(is_eligible("A2.3.5432.AKQJ87", Opening::TwoClubs));
+    assert!(is_eligible("A2.3.AKQJ87.5432", Opening::TwoDiamonds));
 
-    assert!(!is_eligible("32.32.5432.AKQJ8", Opening::TwoClubs));
-    assert!(!is_eligible("32.32.AKQJ8.5432", Opening::TwoDiamonds));
-    assert!(!is_eligible("3.32.5432.AKQJ87", Opening::TwoClubs));
-    assert!(!is_eligible("3.32.AKQJ87.5432", Opening::TwoDiamonds));
+    assert!(!is_eligible("A.3.T5432.AKQJ87", Opening::TwoClubs));
+    assert!(!is_eligible("A.3.AKQJ87.T5432", Opening::TwoDiamonds));
+    assert!(!is_eligible("A432.3.32.AKQJ87", Opening::TwoClubs));
+    assert!(!is_eligible("A432.3.AKQJ87.32", Opening::TwoDiamonds));
 }
 
 #[test]
-fn six_four_minor_exception_is_diagnostic_only() {
-    let clubs = hand("32.3.5432.AKQJ87");
-    let diamonds = hand("32.3.AKQJ87.5432");
+fn six_four_minor_assignment_is_visible_in_the_diagnostic() {
+    let clubs = hand("A2.3.5432.AKQJ87");
+    let diamonds = hand("A2.3.AKQJ87.5432");
 
     assert_eq!(minor_exception_candidates(clubs), vec![Opening::TwoClubs]);
     assert_eq!(
         minor_exception_candidates(diamonds),
         vec![Opening::TwoDiamonds]
     );
-    assert!(!eligible_openings(clubs).contains(&Opening::TwoClubs));
-    assert!(!eligible_openings(diamonds).contains(&Opening::TwoDiamonds));
+    assert!(eligible_openings(clubs).contains(&Opening::TwoClubs));
+    assert!(eligible_openings(diamonds).contains(&Opening::TwoDiamonds));
 
     let wrong_side_suit = hand("32.5432.3.AKQJ87");
     assert!(minor_exception_candidates(wrong_side_suit).is_empty());
@@ -207,19 +213,19 @@ fn hcp_boundaries_cover_every_limited_opening() {
         ),
         (
             Opening::TwoClubs,
-            "432.432.32.AKQ87",
-            "432.432.32.AKQJ8",
-            "A32.432.J2.AKQJ8",
-            "K32.K32.32.AKQJ8",
-            [9, 10, 15, 16],
+            "432.432.2.AKQJ87",
+            "J32.432.2.AKQJ87",
+            "A3.432.J2.AKQJ87",
+            "Q3.K32.J2.AKQJ87",
+            [10, 11, 15, 16],
         ),
         (
             Opening::TwoDiamonds,
-            "432.432.AKQ87.32",
-            "432.432.AKQJ8.32",
-            "A32.432.AKQJ8.J2",
-            "K32.K32.AKQJ8.32",
-            [9, 10, 15, 16],
+            "432.432.AKQJ87.2",
+            "J32.432.AKQJ87.2",
+            "A3.432.AKQJ87.J2",
+            "Q3.K32.AKQJ87.J2",
+            [10, 11, 15, 16],
         ),
     ];
 
@@ -255,16 +261,15 @@ fn one_club_and_strong_one_spade_have_their_stated_hcp_boundaries() {
 }
 
 #[test]
-fn no_match_and_unresolved_overlap_remain_explicit() {
+fn no_match_and_four_card_major_routing_remain_explicit() {
     let no_match = hand("AQ32.K32.J42.J32");
     assert_eq!(eligible_openings(no_match), Vec::<Opening>::new());
     assert_eq!(select_opening(no_match), OpeningSelection::NoMatch);
 
-    let overlap = hand("AKQ2.3.KQJ2.8765");
-    let candidates = vec![Opening::OneDiamond, Opening::OneSpade];
-    assert_eq!(eligible_openings(overlap), candidates);
+    let four_spades = hand("AKQ2.3.KQJ2.8765");
+    assert_eq!(eligible_openings(four_spades), vec![Opening::OneDiamond]);
     assert_eq!(
-        select_opening(overlap),
-        OpeningSelection::Ambiguous(candidates)
+        select_opening(four_spades),
+        OpeningSelection::Selected(Opening::OneDiamond)
     );
 }

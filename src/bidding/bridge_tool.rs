@@ -1,16 +1,16 @@
-//! Pure opening-bid audit for the proposed BridgeTool system.
+//! Pure opening-bid audit for the PEN-Club draft system.
 //!
 //! This module classifies literal opening eligibility without constructing a
 //! Pons [Rules](super::Rules) table. It is deliberately separate from the
-//! shipped American system while opening priorities and meanings remain under
-//! review.
+//! executable PEN-Club system. The two implementations deliberately remain
+//! separate surfaces, with parity tests pinning their shared opening meanings.
 
 use core::fmt;
 
 use contract_bridge::eval;
 use contract_bridge::{Hand, Suit};
 
-/// An opening call implemented by the first BridgeTool audit.
+/// An opening call implemented by the PEN-Club audit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Opening {
     /// 1♣: 16+ HCP, except the 16–19 HCP strong-club 1♠ shape.
@@ -19,19 +19,26 @@ pub enum Opening {
     OneDiamond,
     /// 1♥: 10–15 HCP, 4+ hearts, fewer than four spades, and unbalanced.
     OneHeart,
-    /// 1♠: either a 10–15 HCP minor two-suiter or the 16–19 strong-club shape.
+    /// 1♠: either a 10–15 HCP minor two-suiter denying a four-card major,
+    /// or the 16–19 strong-club shape.
     OneSpade,
     /// 1NT: 12–15 HCP with one of the explicitly permitted shapes.
     OneNotrump,
-    /// 2♣: the basic 10–15 HCP single-suited club case.
+    /// 2♣: 11–15 HCP, 6+ clubs, no four-card major, at most four diamonds.
     TwoClubs,
-    /// 2♦: the basic 10–15 HCP single-suited diamond case.
+    /// 2♦: 11–15 HCP, 6+ diamonds, no four-card major, at most four clubs.
     TwoDiamonds,
+    /// 2♥: 5–9 HCP with 6+ hearts.
+    TwoHearts,
+    /// 2♠: 5–9 HCP with 6+ spades.
+    TwoSpades,
+    /// 2NT: 22–24 HCP, balanced.
+    TwoNotrump,
 }
 
 impl Opening {
     /// Every opening implemented by this audit, in call order.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 10] = [
         Self::OneClub,
         Self::OneDiamond,
         Self::OneHeart,
@@ -39,6 +46,9 @@ impl Opening {
         Self::OneNotrump,
         Self::TwoClubs,
         Self::TwoDiamonds,
+        Self::TwoHearts,
+        Self::TwoSpades,
+        Self::TwoNotrump,
     ];
 }
 
@@ -52,6 +62,9 @@ impl fmt::Display for Opening {
             Self::OneNotrump => "1NT",
             Self::TwoClubs => "2♣",
             Self::TwoDiamonds => "2♦",
+            Self::TwoHearts => "2♥",
+            Self::TwoSpades => "2♠",
+            Self::TwoNotrump => "2NT",
         })
     }
 }
@@ -169,25 +182,36 @@ pub fn eligible_openings(hand: Hand) -> Vec<Opening> {
         .collect()
 }
 
-/// Select an opening only where the audit defines an explicit resolution.
+/// Select an opening where PEN-Club defines an explicit resolution.
 #[must_use]
 pub fn select_opening(hand: Hand) -> OpeningSelection {
     let candidates = eligible_openings(hand);
-    if candidates.contains(&Opening::OneNotrump) {
-        OpeningSelection::Selected(Opening::OneNotrump)
-    } else {
-        match candidates.as_slice() {
-            [] => OpeningSelection::NoMatch,
-            [opening] => OpeningSelection::Selected(*opening),
-            _ => OpeningSelection::Ambiguous(candidates),
+    for opening in [
+        Opening::OneNotrump,
+        Opening::OneDiamond,
+        Opening::OneHeart,
+        Opening::TwoClubs,
+        Opening::TwoDiamonds,
+        Opening::OneSpade,
+        Opening::OneClub,
+        Opening::TwoNotrump,
+    ] {
+        if candidates.contains(&opening) {
+            return OpeningSelection::Selected(opening);
         }
+    }
+    match candidates.as_slice() {
+        [] => OpeningSelection::NoMatch,
+        [opening] => OpeningSelection::Selected(*opening),
+        // The source gives no priority for the pathological weak 6-6 majors.
+        _ => OpeningSelection::Ambiguous(candidates),
     }
 }
 
-/// Return shape-only candidates for the unresolved 6–4 minor exception.
+/// Return shape-only candidates for PEN-Club's explicit 6+–4 minor assignment.
 ///
-/// No HCP or suit-quality condition is added here because none has been
-/// defined for this diagnostic. A returned call is not an eligible opening.
+/// This remains a diagnostic list: eligibility additionally applies the
+/// opening's 11–15 HCP band and denies a four-card major.
 #[must_use]
 pub fn minor_exception_candidates(hand: Hand) -> Vec<Opening> {
     let facts = HandFacts::from(hand);
@@ -208,8 +232,11 @@ pub fn minor_exception_candidates(hand: Hand) -> Vec<Opening> {
 
 fn is_eligible(opening: Opening, facts: &HandFacts) -> bool {
     let hcp_10_to_15 = (10..=15).contains(&facts.hcp);
+    let hcp_11_to_15 = (11..=15).contains(&facts.hcp);
     match opening {
-        Opening::OneClub => facts.hcp >= 16 && !is_strong_club_one_spade(facts),
+        Opening::OneClub => {
+            facts.hcp >= 16 && !is_strong_club_one_spade(facts) && !is_two_notrump(facts)
+        }
         Opening::OneDiamond => {
             hcp_10_to_15 && facts.length(Suit::Spades) >= 4 && facts.is_unbalanced()
         }
@@ -220,12 +247,21 @@ fn is_eligible(opening: Opening, facts: &HandFacts) -> bool {
                 && facts.is_unbalanced()
         }
         Opening::OneSpade => {
-            (hcp_10_to_15 && facts.length(Suit::Clubs) >= 4 && facts.length(Suit::Diamonds) >= 4)
+            (hcp_10_to_15
+                && facts.length(Suit::Clubs) >= 4
+                && facts.length(Suit::Diamonds) >= 4
+                && facts.length(Suit::Hearts) < 4
+                && facts.length(Suit::Spades) < 4
+                && !is_six_four_minor(facts, Suit::Clubs)
+                && !is_six_four_minor(facts, Suit::Diamonds))
                 || is_strong_club_one_spade(facts)
         }
         Opening::OneNotrump => is_one_notrump(facts),
-        Opening::TwoClubs => hcp_10_to_15 && is_basic_minor(facts, Suit::Clubs),
-        Opening::TwoDiamonds => hcp_10_to_15 && is_basic_minor(facts, Suit::Diamonds),
+        Opening::TwoClubs => hcp_11_to_15 && is_long_minor(facts, Suit::Clubs),
+        Opening::TwoDiamonds => hcp_11_to_15 && is_long_minor(facts, Suit::Diamonds),
+        Opening::TwoHearts => (5..=9).contains(&facts.hcp) && facts.length(Suit::Hearts) >= 6,
+        Opening::TwoSpades => (5..=9).contains(&facts.hcp) && facts.length(Suit::Spades) >= 6,
+        Opening::TwoNotrump => is_two_notrump(facts),
     }
 }
 
@@ -247,11 +283,29 @@ fn is_strong_club_one_spade(facts: &HandFacts) -> bool {
             .all(|suit| facts.length(Suit::Clubs) > facts.length(suit))
 }
 
-fn is_basic_minor(facts: &HandFacts, minor: Suit) -> bool {
-    facts.length(minor) >= 5
-        && Suit::ASC
-            .into_iter()
-            .all(|suit| suit == minor || facts.length(suit) <= 3)
+fn is_long_minor(facts: &HandFacts, minor: Suit) -> bool {
+    let other = if minor == Suit::Clubs {
+        Suit::Diamonds
+    } else {
+        Suit::Clubs
+    };
+    facts.length(minor) >= 6
+        && facts.length(other) <= 4
+        && facts.length(Suit::Hearts) < 4
+        && facts.length(Suit::Spades) < 4
+}
+
+fn is_six_four_minor(facts: &HandFacts, minor: Suit) -> bool {
+    let other = if minor == Suit::Clubs {
+        Suit::Diamonds
+    } else {
+        Suit::Clubs
+    };
+    facts.length(minor) >= 6 && facts.length(other) == 4
+}
+
+fn is_two_notrump(facts: &HandFacts) -> bool {
+    (22..=24).contains(&facts.hcp) && facts.is_ordinary_balanced()
 }
 
 fn suit_list(suits: &[Suit]) -> String {

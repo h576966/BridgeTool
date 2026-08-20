@@ -1,10 +1,10 @@
 # BridgeTool web (`pons-web` crate)
 
 The BridgeTool browser shell over [pons](..) has two explicit app profiles:
-the complete **Pons American** bidder and the opening-only **BridgeTool Draft**.
-The former powers practice, demos, and book inspection; the latter exposes the
-provisional opening audit without pretending that unfinished continuations can
-bid a full auction. Everything runs client-side as WebAssembly; there is no
+the complete **Pons American** bidder and the playable **PEN-Club** draft.
+Both power practice, demos, editing, and book inspection. PEN-Club distinguishes
+source-backed authored nodes from the deterministic fallback that completes
+uncovered auctions. Everything runs client-side as WebAssembly; there is no
 server.
 
 Double dummy runs in the browser too, via the pure-Rust
@@ -61,28 +61,28 @@ Seven views:
   your calls you see the bot's top-3 picks with probabilities; after the
   auction, all four hands, the final contract, the oracle's verdict over 100
   opponent reshuffles, and the full double-dummy table.
-  This is available under Pons American; BridgeTool Draft shows an explicit
-  opening-only status instead of starting a Pons auction.
+  The selected app profile supplies both partnerships' bidding systems.
 - **Demo** — deal a random board and watch `american()` bid all four seats,
   then see the double-dummy table and the contract's actual-layout verdict.
-  It is likewise Pons American-only.
-- **Opening Audit** — inspect one complete hand with the provisional pure
-  BridgeTool opening classifier. Eligibility, explicit selection, ambiguity,
-  no-match, and diagnostic-only 6–4 minor candidates stay separate. Its 1NT is
+  It uses either Pons American or PEN-Club according to the app profile.
+- **Opening Audit** — inspect one complete hand with the PEN-Club opening
+  classifier used by the executable system. Eligibility, explicit selection,
+  ambiguity, no-match, and diagnostic-only 6+–4 minor assignments stay
+  separate. Its 1NT is
   12–15 HCP with at least three hearts and three spades, not necessarily exact
   3–3 majors. This view does not change Pons American.
 - **Book** — the authored 2/1 books (constructive/competitive/defensive),
   every node's rules with weights and the constraints' own English
   descriptions. Search renders the first matching nodes instead of placing the
   entire book in the DOM. An NS/EW selector chooses which partnership's current
-  book is shown. BridgeTool Draft states that no authored book exists yet.
+  book is shown. PEN-Club exposes its authored constructive, competitive, and
+  defensive nodes; deterministic fallback calls are intentionally absent.
 - **Edit** — a PBN field two-way-synced with a card palette; build a deal by
-  hand, then "Bid it out in Demo" under Pons American. Editing and Evaluate
-  remain available under BridgeTool Draft, but the Pons-only hand-off is disabled.
+  hand, then bid it out with the selected system or evaluate it.
 - **Evaluate** — estimate tricks for two fixed N-S hands, price contracts, and
   optionally verify the estimate over double-dummy East-West reshuffles.
 - **Settings** — under Pons American, toggle bidding conventions grouped by area.
-  Under BridgeTool Draft, the tab is a read-only implementation summary. The
+  Under PEN-Club, the tab is a read-only implementation summary. The
   Pons tab is generated from the Rust registry (`describe_options()` in
   `src/lib.rs`), so a
   convention added there appears here automatically; mutually-exclusive families
@@ -110,7 +110,8 @@ pre-split global value is copied to both profiles on first load, preserving the
 old symmetric behavior.  Opponent disclosures such as Woolsey's Landy `2♣`
 and Multi `2♦` are derived from the other profile rather than user-editable.
 The app-global system identity is stored under its own
-`bridgetool-system-profile` key and is never written into `Agreements`.
+`bridgetool-system-profile` key and is never written into `Agreements`. The
+legacy `bridge-tool-draft` value migrates to `pen-club` on first load.
 
 The registry is **curated by measurement**: it offers every convention that A/B's
 as a win or a wash, and hides options that measure *worse* — the engine keeps

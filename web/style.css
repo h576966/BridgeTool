@@ -115,7 +115,7 @@ h1 { font-size: 1.3rem; letter-spacing: -0.02em; margin: 0; }
   font-weight: 700;
   white-space: nowrap;
 }
-.system-state.draft { border-style: dashed; }
+.system-state.provisional { border-style: dashed; }
 nav {
   display: flex;
   flex: 1 1 34rem;
@@ -145,10 +145,10 @@ nav a.active { background: var(--primary); border-color: #7894ae; color: #fff; }
 main { max-width: 72rem; margin: 0 auto; padding: 1.25rem clamp(0.75rem, 3vw, 1.5rem) 2rem; }
 section { display: flex; flex-direction: column; gap: 1.25rem; align-items: stretch; }
 .view-stack { display: flex; flex-direction: column; gap: 1.25rem; }
-.draft-only { display: none !important; }
-body[data-system="draft"] .pons-only { display: none !important; }
-body[data-system="draft"] .draft-only { display: block !important; }
-body[data-system="draft"] .draft-only.view-stack { display: flex !important; }
+.pen-only { display: none !important; }
+body[data-system="pen"] .pons-only { display: none !important; }
+body[data-system="pen"] .pen-only { display: block !important; }
+body[data-system="pen"] .pen-only.view-stack { display: flex !important; }
 .view-heading { max-width: 48rem; }
 .view-heading h2 { margin: 0.1rem 0 0.35rem; font-size: clamp(1.55rem, 3vw, 2rem); }
 .view-heading p:last-child { margin: 0; opacity: 0.82; }
@@ -551,6 +551,8 @@ label.opt input { width: 1rem; height: 1rem; cursor: pointer; }
   .hand-panel, .auction-panel { min-width: 0; }
   .compass { grid-template-columns: 1fr 1fr; grid-template-areas: "n n" "w e" "s s"; }
   .compass-seat { min-width: 0; width: 100%; }
+  .compass-seat .suitline { gap: 0.35rem; font-size: 0.9rem; }
+  .compass-seat .ranks { letter-spacing: 0.03em; }
   .bid-grid { grid-template-columns: repeat(5, 1fr); width: 100%; }
   .bid-extra { grid-template-columns: repeat(3, 1fr); width: 100%; }
   .audit-result { grid-template-columns: 1fr; }

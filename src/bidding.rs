@@ -44,6 +44,8 @@ pub mod map;
 pub mod neural;
 /// Deterministic safety shell over the distilled neural floor
 pub mod neural_floor;
+/// PEN-Club — a playable strong-club draft on the deterministic floor
+pub mod pen_club;
 /// Declarative book layer: entry rows compiled into the existing [`Trie`]
 pub(in crate::bidding) mod rows;
 pub mod rules;
@@ -85,6 +87,7 @@ pub use inference::{
 };
 pub use instinct::instinct;
 pub use map::Map;
+pub use pen_club::{pen_club, pen_club_book, pen_club_book_default, pen_club_default};
 pub use rules::{Alert, Rules};
 pub use sampler::{sample_defender_remnants, sample_layouts};
 pub use table::Table;

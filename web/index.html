@@ -19,7 +19,7 @@
       <div class="system-picker-row">
         <select id="system-profile">
           <option value="pons-american" selected>Pons American</option>
-          <option value="bridge-tool-draft">BridgeTool Draft</option>
+          <option value="pen-club">PEN-Club</option>
         </select>
         <span id="system-profile-state" class="system-state" aria-live="polite">Full bidding</span>
       </div>
@@ -40,13 +40,7 @@
   </header>
   <main id="main-content">
     <section id="practice">
-      <div class="draft-only panel system-empty">
-        <p class="eyebrow">Opening-only system</p>
-        <h2>Practice is not available yet</h2>
-        <p>BridgeTool Draft currently supports opening analysis only.</p>
-        <a class="button-link" href="#opening-audit">Open Opening Audit</a>
-      </div>
-      <div class="pons-only view-stack">
+      <div class="view-stack">
         <div class="controls">
           <label>Seat <select id="p-seat">
             <option>N</option><option>E</option><option selected>S</option><option>W</option>
@@ -78,13 +72,7 @@
       </div>
     </section>
     <section id="demo" class="hidden">
-      <div class="draft-only panel system-empty">
-        <p class="eyebrow">Opening-only system</p>
-        <h2>Demo is not available yet</h2>
-        <p>BridgeTool Draft currently supports opening analysis only.</p>
-        <a class="button-link" href="#opening-audit">Open Opening Audit</a>
-      </div>
-      <div class="pons-only view-stack">
+      <div class="view-stack">
         <div class="controls">
           <label>Dealer <select id="d-dealer">
             <option selected>N</option><option>E</option><option>S</option><option>W</option>
@@ -106,7 +94,7 @@
     </section>
     <section id="opening-audit" class="hidden">
       <div class="view-heading">
-        <p class="eyebrow">BridgeTool Draft · read-only</p>
+        <p class="eyebrow">PEN-Club · opening diagnostic</p>
         <h2>Opening Audit</h2>
         <p>Inspect one hand against the provisional opening classifier. Its 1NT shows
           12–15 HCP and at least three hearts and three spades; it does not require exact 3–3 majors.</p>
@@ -125,14 +113,7 @@
       <div id="o-result" class="audit-result" aria-live="polite"></div>
     </section>
     <section id="book" class="hidden">
-      <div class="draft-only panel system-empty">
-        <p class="eyebrow">Opening-only system</p>
-        <h2>No authored bidding book yet</h2>
-        <p>BridgeTool Draft defines opening eligibility only. Responses, rebids,
-          inference, and competitive auctions remain unspecified.</p>
-        <a class="button-link" href="#opening-audit">Open Opening Audit</a>
-      </div>
-      <div class="pons-only view-stack">
+      <div class="view-stack">
         <div class="controls">
           <label>Partnership <select id="b-pair">
             <option value="ns" selected>North–South</option>
@@ -151,12 +132,9 @@
         <button id="e-copy" class="secondary">Copy PBN</button>
         <button id="e-random" class="primary">Random</button>
         <button id="e-clear" class="secondary">Clear</button>
-        <button id="e-bid" class="primary" aria-describedby="e-bid-note">Bid it out in Demo →</button>
+        <button id="e-bid" class="primary">Bid it out in Demo →</button>
         <button id="e-eval" class="secondary">Evaluate N-S →</button>
       </div>
-      <p id="e-bid-note" class="draft-only system-inline-note">
-        Bidding this deal is Pons American-only. Editing and evaluation remain available.
-      </p>
       <div id="e-status" class="boardinfo"></div>
       <div id="e-grid" class="editgrid"></div>
       <div id="e-board"></div>
@@ -195,19 +173,19 @@
       </div>
     </section>
     <section id="settings" class="hidden">
-      <div class="draft-only view-stack">
+      <div class="pen-only view-stack">
         <div class="panel system-summary">
-          <p class="eyebrow">BridgeTool Draft</p>
+          <p class="eyebrow">PEN-Club</p>
           <div class="system-summary-heading">
-            <h2>Opening analysis only</h2>
+            <h2>Fixed playable draft</h2>
             <span class="status-chip no-match">Draft</span>
           </div>
-          <p>The active Draft profile does not expose Pons convention settings or
-            claim support for complete auctions.</p>
+          <p>PEN-Club can bid complete auctions. Its explicitly authored nodes are
+            supplemented by Pons' deterministic floor; it has no configurable agreement knobs yet.</p>
           <dl class="system-facts">
-            <div><dt>Available</dt><dd>Read-only Opening Audit</dd></div>
+            <div><dt>Available</dt><dd>Practice, Demo, Book, Edit bidding, and Opening Audit</dd></div>
             <div><dt>1NT</dt><dd>12–15 HCP, at least 3♥ and 3♠</dd></div>
-            <div><dt>Not implemented</dt><dd>Responses, rebids, inference, competition</dd></div>
+            <div><dt>Fallback</dt><dd>Deterministic Pons bidding in unauthored positions</dd></div>
           </dl>
           <a class="button-link" href="#opening-audit">Open Opening Audit</a>
         </div>

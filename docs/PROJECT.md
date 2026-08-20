@@ -9,8 +9,8 @@ robots, and compare systems or conventions through reproducible experiments.
 DDS and BBA/EPBot provide analysis and reference baselines.
 
 The near-term priority is a stable, understandable local foundation with low
-maintenance cost. It is not yet the implementation of the custom bidding
-system.
+maintenance cost. The first playable PEN-Club draft is implemented, while
+source ambiguities and unauthored continuations remain explicit.
 
 ## Why Pons
 
@@ -29,12 +29,14 @@ its Git history intact and remains the core crate and engine.
 - **DDS:** native double-dummy analysis used by tests, examples, and scoring.
 - **BBA/EPBot adapter:** the pinned `vendor/bba` submodule and Pons examples for
   comparison with an external reference bidder.
-- **WebAssembly web app:** the existing local, client-side interface with an
-  explicit app-global choice between fully playable Pons American and the
-  opening-only BridgeTool Draft. Pons retains separate NS/EW convention
-  profiles; Draft exposes only read-only opening inspection.
-- **Future BridgeTool system module:** the custom system, added only after its
-  meanings and priorities are precise enough to implement and test.
+- **PEN-Club bidding system:** a role-aware Pons `System` with separate
+  constructive, competitive, and defensive books. Explicitly authored rules
+  are source-backed; a deterministic instinct floor completes uncovered
+  auctions without presenting them as authored PEN agreements.
+- **WebAssembly web app:** the local, client-side interface with an app-global
+  choice between Pons American and playable PEN-Club. Practice, Demo, Book,
+  Edit, and Opening Audit all use the selected engine system. Pons retains
+  separate NS/EW convention profiles; PEN-Club settings are fixed for now.
 - **Future analysis and experiment tools:** coverage, overlap, frequency, and
   reproducible paired A/B reports, preferably extending existing Pons tools.
 
@@ -59,7 +61,7 @@ confirm the configuration with `git remote -v`.
 5. **Stage 4:** paired A/B experiments against the standard system and
    BBA/EPBot.
 6. **Stage 5:** improved local web app, separate NS/EW Pons profiles, and an
-   honest app-level boundary between Pons American and BridgeTool Draft.
+   honest app-level boundary between Pons American and playable PEN-Club.
 7. **Stage 6:** possible data file or DSL for bidding systems, only if
    system-as-code proves impractical.
 

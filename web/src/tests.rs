@@ -43,16 +43,13 @@ fn opening_audit_selects_weak_notrump_with_three_three_majors() {
 }
 
 #[test]
-fn opening_audit_preserves_ambiguity() {
+fn opening_audit_routes_four_card_spade_hand_to_one_diamond() {
     let json = parse(&opening_audit("AKQ2.3.KQJ2.8765"));
     let audit = &json["audit"];
 
-    assert_eq!(audit["eligible_openings"], serde_json::json!(["1♦", "1♠"]));
-    assert_eq!(audit["selection"]["kind"], "ambiguous");
-    assert_eq!(
-        audit["selection"]["openings"],
-        serde_json::json!(["1♦", "1♠"])
-    );
+    assert_eq!(audit["eligible_openings"], serde_json::json!(["1♦"]));
+    assert_eq!(audit["selection"]["kind"], "selected");
+    assert_eq!(audit["selection"]["openings"], serde_json::json!(["1♦"]));
 }
 
 #[test]
@@ -66,11 +63,11 @@ fn opening_audit_keeps_no_match_distinct_from_pass() {
 }
 
 #[test]
-fn opening_audit_marks_minor_exception_as_diagnostic_only() {
-    let json = parse(&opening_audit("32.3.5432.AKQJ87"));
+fn opening_audit_marks_the_six_four_minor_assignment() {
+    let json = parse(&opening_audit("A2.3.5432.AKQJ87"));
     let audit = &json["audit"];
 
-    assert_eq!(audit["eligible_openings"], serde_json::json!(["1♠"]));
+    assert_eq!(audit["eligible_openings"], serde_json::json!(["2♣"]));
     assert_eq!(
         audit["minor_exception_candidates"],
         serde_json::json!(["2♣"])
@@ -250,6 +247,87 @@ fn set_option_reroutes_the_bidding() {
 }
 
 #[test]
+fn selecting_pen_club_changes_the_real_bidder_and_clears_the_board() {
+    const PBN: &str = "N:Q2.K3.AQ4.KQ8765 AKJT9.AQJ.KJT.A9 876.T987.987.JT4 543.6542.6532.32";
+    let mut table = WebTable::new("1");
+
+    let pons = parse(&table.deal_pbn(PBN, "N", "none"));
+    let pons_opening = pons["auction"][0].clone();
+    assert!(table.set_system_profile("pen-club"));
+    assert_eq!(table.snapshot(), "null", "switching invalidates the board");
+
+    let pen = parse(&table.deal_pbn(PBN, "N", "none"));
+    assert_eq!(pen["auction"][0], "1♠");
+    assert_ne!(pen["auction"][0], pons_opening);
+
+    let before = table.snapshot();
+    assert!(!table.set_system_profile("not-a-system"));
+    assert_eq!(table.snapshot(), before, "an invalid profile is a no-op");
+}
+
+#[test]
+fn pen_club_practice_demo_and_editor_deal_complete() {
+    const PBN: &str = "N:Q2.K3.AQ4.KQ8765 AKJT9.AQJ.KJT.A9 876.T987.987.JT4 543.6542.6532.32";
+    let mut table = WebTable::new("12345");
+    assert!(table.set_system_profile("pen-club"));
+
+    let mut practice = parse(&table.deal_practice("S", "N", "none", 0));
+    for _ in 0..100 {
+        if practice["your_turn"] != true {
+            break;
+        }
+        practice = parse(&table.bid("P"));
+    }
+    assert_eq!(practice["ended"], true, "PEN practice must terminate");
+
+    let demo = parse(&table.deal_demo("N", "none"));
+    assert_eq!(demo["ended"], true, "PEN demo must terminate");
+
+    let edited = parse(&table.deal_pbn(PBN, "N", "none"));
+    assert_eq!(edited["ended"], true, "Edit → Bid it out must terminate");
+    assert_eq!(edited["auction"][0], "1♠");
+}
+
+#[test]
+fn pen_club_book_exports_pen_nodes() {
+    let pen = book("pen-club", "ns");
+    let pons = book("pons-american", "ns");
+    assert_ne!(pen, pons);
+
+    let nodes: serde_json::Value = serde_json::from_str(&pen).expect("PEN book JSON");
+    let nodes = nodes.as_array().expect("PEN book is an array");
+    assert!(
+        nodes.len() >= 20,
+        "expected authored PEN nodes: {}",
+        nodes.len()
+    );
+    let opening = nodes
+        .iter()
+        .find(|node| node["book"] == "constructive" && node["auction"] == "(opening)")
+        .expect("PEN opening node");
+    assert!(
+        opening["rules"]
+            .as_array()
+            .expect("opening rules")
+            .iter()
+            .any(|rule| rule["call"] == "1♠")
+    );
+}
+
+#[test]
+fn pen_club_profile_is_isolated_from_saved_pons_settings() {
+    let before = book("pen-club", "ns");
+    set_choice("ns", "notrump_defense", "woolsey");
+    set_option("ns", "open_one_notrump", false);
+
+    assert_eq!(book("pen-club", "ns"), before);
+    assert_eq!(book("pen-club", "ew"), before);
+
+    set_choice("ns", "notrump_defense", "natural");
+    set_option("ns", "open_one_notrump", true);
+}
+
+#[test]
 fn settings_are_partnership_scoped() {
     set_option("ns", "open_one_notrump", false);
     let [ns, ew] = agreements();
@@ -276,7 +354,7 @@ fn asymmetric_table_reads_the_opponents_actual_book() {
     use contract_bridge::Suit;
 
     set_choice("ew", "notrump_defense", "woolsey");
-    let (ns, ew) = partnerships();
+    let (ns, ew) = partnerships(WebSystemProfile::PonsAmerican);
     let table = Table::new(ns, ew, Seat::North, AbsoluteVulnerability::NONE);
     let auction = [
         Call::Bid(Bid::new(1, Strain::Notrump)),
@@ -297,7 +375,7 @@ fn default_mixed_table_matches_the_old_symmetric_table() {
     let system = american(&defaults);
     let baseline = Table::of_systems(&system, &system, Seat::North, AbsoluteVulnerability::NONE)
         .bid_out(&deal);
-    let (ns, ew) = partnerships();
+    let (ns, ew) = partnerships(WebSystemProfile::PonsAmerican);
     let mixed = Table::new(ns, ew, Seat::North, AbsoluteVulnerability::NONE).bid_out(&deal);
     assert_eq!(mixed, baseline);
 }
@@ -385,15 +463,19 @@ fn web_shell_keeps_system_identity_outside_pons_settings() {
         "Pons American remains the app default"
     );
     assert!(
-        html.contains("<option value=\"bridge-tool-draft\">BridgeTool Draft</option>"),
-        "the opening-only Draft is an explicit profile"
+        html.contains("<option value=\"pen-club\">PEN-Club</option>"),
+        "PEN-Club is an explicit playable profile"
     );
     assert!(
         app.contains("const SYSTEM_STORAGE_KEY = 'bridgetool-system-profile';"),
         "system identity has its own persistence key"
     );
     assert!(
-        !registry.contains("bridgetool-system-profile") && !registry.contains("bridge-tool-draft"),
+        app.contains("const LEGACY_DRAFT_SYSTEM = 'bridge-tool-draft';"),
+        "the old stored Draft value is migrated"
+    );
+    assert!(
+        !registry.contains("bridgetool-system-profile") && !registry.contains("pen-club"),
         "system identity must not become an Agreements knob"
     );
 }
@@ -690,7 +772,8 @@ fn oracle_is_practice_only() {
 
 #[test]
 fn book_is_json_with_described_nodes() {
-    let nodes: serde_json::Value = serde_json::from_str(&book("ns")).expect("book is valid JSON");
+    let nodes: serde_json::Value =
+        serde_json::from_str(&book("pons-american", "ns")).expect("book is valid JSON");
     let nodes = nodes.as_array().expect("book is an array");
     assert!(
         nodes.len() > 100,
@@ -708,8 +791,9 @@ fn book_is_json_with_described_nodes() {
 #[test]
 fn book_uses_the_selected_partnership() {
     set_option("ns", "open_one_notrump", false);
-    assert_ne!(book("ns"), book("ew"));
-    assert_eq!(book("unknown"), "[]");
+    assert_ne!(book("pons-american", "ns"), book("pons-american", "ew"));
+    assert_eq!(book("pons-american", "unknown"), "[]");
+    assert_eq!(book("unknown", "ns"), "[]");
     set_option("ns", "open_one_notrump", true);
 }
 
@@ -719,7 +803,8 @@ fn book_uses_the_selected_partnership() {
 /// only spades; the seat-invariant-auction key restores all four.
 #[test]
 fn book_renders_1nt_overcall_advances_per_opening() {
-    let nodes: serde_json::Value = serde_json::from_str(&book("ns")).expect("book is valid JSON");
+    let nodes: serde_json::Value =
+        serde_json::from_str(&book("pons-american", "ns")).expect("book is valid JSON");
     let nodes = nodes.as_array().expect("book is an array");
     for opening in ["1♣", "1♦", "1♥", "1♠"] {
         // The advancer's response menu after their opening, our 1NT overcall,
@@ -738,7 +823,8 @@ fn book_renders_1nt_overcall_advances_per_opening() {
 /// the guard's condition folded into the auction heading.
 #[test]
 fn book_renders_the_competitive_fallbacks() {
-    let nodes: serde_json::Value = serde_json::from_str(&book("ns")).expect("book is valid JSON");
+    let nodes: serde_json::Value =
+        serde_json::from_str(&book("pons-american", "ns")).expect("book is valid JSON");
     let competitive: Vec<&serde_json::Value> = nodes
         .as_array()
         .expect("book is an array")

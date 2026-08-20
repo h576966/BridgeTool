@@ -29,7 +29,10 @@ use pons::bidding::bridge_tool::{
 use pons::bidding::evaluator::trick_estimates;
 use pons::bidding::fallback::Fallback;
 use pons::bidding::features::ConventionCard;
-use pons::bidding::{Partnership, Relative, Table, american, american_with_card, instinct};
+use pons::bidding::{
+    Partnership, Relative, Table, american, american_with_card, instinct, pen_club_book_default,
+    pen_club_default,
+};
 use pons::scoring::{final_contract, imps};
 use pons_dds::{Par, Solver, TrickCountTable, Vulnerability, calculate_par, solve_deal_on};
 use rand::SeedableRng as _;
@@ -75,7 +78,7 @@ struct OpeningSelectionJson {
     openings: Vec<String>,
 }
 
-/// The complete read-only result shown by the BridgeTool opening audit.
+/// The complete read-only result shown by the PEN-Club opening audit.
 #[derive(Serialize)]
 struct OpeningAuditJson {
     hand: HandJson,
@@ -150,11 +153,11 @@ enum OpeningAuditResponse {
     Error { message: &'static str },
 }
 
-/// Inspect one complete hand with the provisional BridgeTool opening audit.
+/// Inspect one complete hand with the provisional PEN-Club opening audit.
 ///
 /// This does not construct or change a Pons bidding system. The returned JSON
-/// keeps literal eligibility, explicit selection, and diagnostic-only minor
-/// exceptions separate so the browser cannot silently resolve an ambiguity.
+/// keeps literal eligibility, explicit selection, and the shape-only minor
+/// assignment diagnostic separate.
 #[wasm_bindgen]
 #[must_use]
 pub fn opening_audit(text: &str) -> String {
@@ -168,6 +171,26 @@ pub fn opening_audit(text: &str) -> String {
         },
     };
     serde_json::to_string(&response).expect("opening audit serialization")
+}
+
+/// The actual bidder selected by the app-level system picker.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum WebSystemProfile {
+    /// The existing configurable Pons American system.
+    #[default]
+    PonsAmerican,
+    /// The fixed, playable PEN-Club draft.
+    PenClub,
+}
+
+impl WebSystemProfile {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "pons-american" => Some(Self::PonsAmerican),
+            "pen-club" => Some(Self::PenClub),
+            _ => None,
+        }
+    }
 }
 
 /// The bot's opinion on one human call, recorded as it was given
@@ -550,6 +573,7 @@ fn verdict_lines(
 pub struct WebTable {
     rng: StdRng,
     board: Option<Board>,
+    profile: WebSystemProfile,
 }
 
 #[wasm_bindgen]
@@ -561,7 +585,23 @@ impl WebTable {
         Self {
             rng: StdRng::seed_from_u64(seed.parse().unwrap_or(0)),
             board: None,
+            profile: WebSystemProfile::default(),
         }
+    }
+
+    /// Select the real bidding engine used by subsequent deals.
+    ///
+    /// A valid selection clears any board and its cached analysis. Unknown
+    /// profile strings are rejected without changing state.
+    pub fn set_system_profile(&mut self, profile: &str) -> bool {
+        let Some(profile) = WebSystemProfile::parse(profile) else {
+            return false;
+        };
+        if self.profile != profile {
+            self.profile = profile;
+            self.board = None;
+        }
+        true
     }
 
     /// Deal a practice board: the human bids `seat`, bots bid the rest
@@ -779,7 +819,7 @@ impl WebTable {
     ) -> String {
         let dealer = dealer.parse().unwrap_or(Seat::North);
         let vul = vul.parse().unwrap_or(AbsoluteVulnerability::NONE);
-        let (ns, ew) = partnerships();
+        let (ns, ew) = partnerships(self.profile);
         let mut board = Board {
             table: Table::new(ns, ew, dealer, vul),
             deal,
@@ -820,19 +860,24 @@ struct RuleJson {
     label: &'static str,
 }
 
-/// One partnership's authored 2/1 books as JSON, for the browser's book tab
+/// One partnership's authored books as JSON, for the browser's Book tab.
 ///
 /// Port of `examples/render-book`: walks the floor-less books and reads each
-/// rule's call, weight, and the constraint's own English description, deduping
-/// seat variants that share one authored table. `pair` is `"ns"` or `"ew"`;
-/// anything else returns an empty list.
+/// `profile` is `"pons-american"` or `"pen-club"`; `pair` is `"ns"` or
+/// `"ew"`. Unknown values return an empty list.
 #[wasm_bindgen]
 #[must_use]
-pub fn book(pair: &str) -> String {
+pub fn book(profile: &str, pair: &str) -> String {
+    let Some(profile) = WebSystemProfile::parse(profile) else {
+        return "[]".to_string();
+    };
     let Some(index) = pair_index(pair) else {
         return "[]".to_string();
     };
-    let system = american_book(&declared_agreements()[index]);
+    let system = match profile {
+        WebSystemProfile::PonsAmerican => american_book(&declared_agreements()[index]),
+        WebSystemProfile::PenClub => pen_club_book_default(),
+    };
     let books: [(&str, &pons::Trie); 3] = [
         ("constructive", &system.constructive.0),
         ("competitive", &system.competitive.0),
@@ -1012,12 +1057,19 @@ fn declared_agreements() -> [Agreements; 2] {
 }
 
 /// Bind a genuinely mixed table: each side sees the other's card and books.
-fn partnerships() -> (Partnership, Partnership) {
+fn partnerships(profile: WebSystemProfile) -> (Partnership, Partnership) {
     let [ns_agreements, ew_agreements] = declared_agreements();
-    let ns_card = ConventionCard::capture(&ns_agreements, false);
-    let ew_card = ConventionCard::capture(&ew_agreements, false);
-    let ns = american_with_card(&ns_agreements, &ew_card).bind();
-    let ew = american_with_card(&ew_agreements, &ns_card).bind();
+    let (ns, ew) = match profile {
+        WebSystemProfile::PonsAmerican => {
+            let ns_card = ConventionCard::capture(&ns_agreements, false);
+            let ew_card = ConventionCard::capture(&ew_agreements, false);
+            (
+                american_with_card(&ns_agreements, &ew_card).bind(),
+                american_with_card(&ew_agreements, &ns_card).bind(),
+            )
+        }
+        WebSystemProfile::PenClub => (pen_club_default().bind(), pen_club_default().bind()),
+    };
     (ns.clone().with_opponents(&ew), ew.with_opponents(&ns))
 }
 

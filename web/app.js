@@ -13,11 +13,14 @@ const BOX_ORDER = ['♣', '♦', '♥', '♠', 'NT']; // bidding-box columns, lo
 const DEMO_PACE_MS = 300; // pause between demo auction reveals
 const SYSTEM_STORAGE_KEY = 'bridgetool-system-profile';
 const PONS_SYSTEM = 'pons-american';
-const DRAFT_SYSTEM = 'bridge-tool-draft';
+const PEN_SYSTEM = 'pen-club';
+const LEGACY_DRAFT_SYSTEM = 'bridge-tool-draft';
 
 const savedSystem = localStorage.getItem(SYSTEM_STORAGE_KEY);
-let activeSystem = savedSystem === DRAFT_SYSTEM ? DRAFT_SYSTEM : PONS_SYSTEM;
-const isDraftSystem = () => activeSystem === DRAFT_SYSTEM;
+let activeSystem = savedSystem === PEN_SYSTEM || savedSystem === LEGACY_DRAFT_SYSTEM
+  ? PEN_SYSTEM
+  : PONS_SYSTEM;
+const isPenSystem = () => activeSystem === PEN_SYSTEM;
 
 const ORACLE_TOTAL = 100; // reshuffles per board
 const ORACLE_CHUNK = 2; // per JS task, so the page keeps painting between them
@@ -34,9 +37,10 @@ let analysisGen = -1; // last boardGen whose DD + oracle were kicked off
 const id = (x) => document.getElementById(x);
 
 async function main() {
-  renderSystemProfile(); // prevent a saved Draft profile from flashing Pons UI during wasm startup
+  renderSystemProfile(); // prevent a saved PEN profile from flashing Pons UI during wasm startup
   await init();
   game = new WebTable(String(Math.floor(Math.random() * 2 ** 53)));
+  game.set_system_profile(activeSystem);
   OPTIONS = JSON.parse(describe_options()); // the Settings registry, from wasm
   // Replay saved overrides: booleans are toggles, strings are radio-choice values.
   for (const pair of PAIRS) {
@@ -60,7 +64,7 @@ async function main() {
 
 function showTab(tab) {
   if (!['practice', 'demo', 'opening-audit', 'book', 'edit', 'binky', 'settings'].includes(tab)) {
-    tab = isDraftSystem() ? 'opening-audit' : 'practice';
+    tab = 'practice';
   }
   for (const sec of document.querySelectorAll('main > section')) {
     sec.classList.toggle('hidden', sec.id !== tab);
@@ -71,16 +75,15 @@ function showTab(tab) {
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  if (tab === 'book' && !bookNodes && !isDraftSystem()) loadBook();
+  if (tab === 'book' && !bookNodes) loadBook();
   if (tab === 'settings' && !settingsBuilt) renderSettings();
   if (tab === 'binky' && !kTable) loadBinky();
 }
 
-// --- app-level system profile -------------------------------------------------
-
-// System identity is intentionally separate from the partnership-scoped Pons
-// Agreements registry below. BridgeTool Draft is opening-only; it must never
-// make a Pons deal merely because a Pons bidder is already available in wasm.
+// --- real engine system profile ----------------------------------------------
+//
+// System identity stays separate from the partnership-scoped Pons Agreements
+// registry below, but it is sent into wasm and selects the actual bidder.
 function initSystemProfile() {
   localStorage.setItem(SYSTEM_STORAGE_KEY, activeSystem);
   id('system-profile').onchange = (ev) => setSystemProfile(ev.target.value);
@@ -88,38 +91,45 @@ function initSystemProfile() {
 }
 
 function setSystemProfile(value) {
-  const next = value === DRAFT_SYSTEM ? DRAFT_SYSTEM : PONS_SYSTEM;
+  const next = value === PEN_SYSTEM ? PEN_SYSTEM : PONS_SYSTEM;
   if (next === activeSystem) return;
 
   activeSystem = next;
+  game.set_system_profile(activeSystem);
   localStorage.setItem(SYSTEM_STORAGE_KEY, activeSystem);
   clearInterval(demoTimer);
   demoTimer = 0;
   boardGen++; // invalidate any in-flight Pons analysis when leaving that profile
   analysisGen = -1;
+  current = null;
   bookNodes = null;
+  clearBoardViews();
   renderSystemProfile();
   paintEdit();
-
-  if (isDraftSystem() && location.hash !== '#opening-audit') {
-    location.hash = 'opening-audit';
-  } else {
-    showTab(location.hash.slice(1));
-  }
+  showTab(location.hash.slice(1));
 }
 
 function renderSystemProfile() {
-  const draft = isDraftSystem();
-  document.body.dataset.system = draft ? 'draft' : 'pons';
+  const pen = isPenSystem();
+  document.body.dataset.system = pen ? 'pen' : 'pons';
   id('system-profile').value = activeSystem;
-  id('system-profile-state').textContent = draft ? 'Opening only' : 'Full bidding';
-  id('system-profile-state').classList.toggle('draft', draft);
+  id('system-profile-state').textContent = pen ? 'Full bidding · draft' : 'Full bidding';
+  id('system-profile-state').classList.toggle('provisional', pen);
+}
+
+function clearBoardViews() {
+  for (const name of ['p-info', 'p-hand', 'p-auction', 'p-feedback', 'd-info', 'd-hands', 'd-auction']) {
+    id(name).replaceChildren();
+  }
+  for (const name of ['p-hint', 'p-feedback', 'p-reveal', 'p-oracle', 'p-dd', 'd-auction', 'd-dd']) {
+    id(name).classList.add('hidden');
+  }
+  updateBiddingBox({ your_turn: false, ended: false, legal: [] });
 }
 
 // --- dealing -----------------------------------------------------------------
 
 function dealPractice() {
-  if (isDraftSystem()) return;
   boardGen++;
   const pick = id('p-dealer').value;
   const dealer = pick === 'rotate' ? SEATS[boardCount % 4] : pick;
@@ -129,13 +139,11 @@ function dealPractice() {
 }
 
 function dealDemo() {
-  if (isDraftSystem()) return;
   runDemo(game.deal_demo(id('d-dealer').value, id('d-vul').value));
 }
 
 // Hand the deal now on screen to the Edit tab so it can be tweaked and re-bid.
 function editDemo() {
-  if (isDraftSystem()) return;
   if (!current || current.mode === 'practice') return;
   editAssign = assignFromHands(current.hands);
   syncFromBoard(); // repaint palette/compass/PBN from the demoed deal
@@ -145,7 +153,6 @@ function editDemo() {
 // Animate a demo snapshot: hands at once, then the auction one call at a time.
 // Shared by the random Deal button and the editor's "Bid it out" hand-off.
 function runDemo(snapshotJSON) {
-  if (isDraftSystem()) return;
   boardGen++;
   clearInterval(demoTimer);
   id('d-dd').classList.add('hidden');
@@ -392,7 +399,7 @@ function updateBiddingBox(s) {
   id('p-bidbox').classList.toggle('inactive', !active);
 }
 
-// --- BridgeTool opening audit -------------------------------------------------
+// --- PEN-Club opening audit ---------------------------------------------------
 
 function initOpeningAudit() {
   id('o-analyze').onclick = renderOpeningAudit;
@@ -415,7 +422,8 @@ function renderOpeningAudit() {
   const result = id('o-result');
 
   error.classList.toggle('hidden', response.status !== 'error');
-  input.toggleAttribute('aria-invalid', response.status === 'error');
+  if (response.status === 'error') input.setAttribute('aria-invalid', 'true');
+  else input.removeAttribute('aria-invalid');
   if (response.status === 'error') {
     error.textContent = response.message;
     result.replaceChildren();
@@ -471,9 +479,9 @@ function renderOpeningAudit() {
         <tbody>${suitRows}</tbody>
       </table>
       <div class="audit-diagnostic">
-        <strong>Possible 6–4 minor exceptions · diagnostic only</strong>
+        <strong>6+–4 minor assignment · shape diagnostic</strong>
         ${auditCallList(audit.minor_exception_candidates)}
-        <p class="hint">These candidates are shape-only and are not included in opening eligibility.</p>
+        <p class="hint">Eligibility also requires 11–15 HCP and no four-card major.</p>
       </div>
     </div>`;
 }
@@ -487,11 +495,7 @@ function auditCallList(calls) {
 // --- book browser --------------------------------------------------------------
 
 function loadBook() {
-  if (isDraftSystem()) {
-    bookNodes = null;
-    return;
-  }
-  const nodes = JSON.parse(book(bookPair));
+  const nodes = JSON.parse(book(activeSystem, bookPair));
   bookNodes = nodes.map((node) => {
     const haystack =
       (node.auction + ' ' + node.rules.map((r) => `${r.call} ${r.text}`).join(' ') +
@@ -584,7 +588,6 @@ function initEdit() {
   id('e-clear').onclick = () => { editAssign = {}; syncFromBoard(); };
   id('e-copy').onclick = () => navigator.clipboard?.writeText(id('e-pbn').value);
   id('e-bid').onclick = () => {
-    if (isDraftSystem()) return;
     location.hash = 'demo'; // hand the edited deal to the Demo tab and bid it out
     runDemo(game.deal_pbn(toPBN(editAssign), id('d-dealer').value, id('d-vul').value));
   };
@@ -615,11 +618,9 @@ function paintEdit() {
   const total = n.N + n.E + n.S + n.W;
   const full = total === 52 && SEATS.every((s) => n[s] === 13);
   id('e-status').textContent = full
-    ? (isDraftSystem()
-        ? 'Full deal ✓ — editing and evaluation are available; bidding requires Pons American'
-        : 'Full deal ✓ — click a card to cycle N→E→S→W→out, or bid it out')
+    ? 'Full deal ✓ — click a card to cycle N→E→S→W→out, or bid it out'
     : `N ${n.N} · E ${n.E} · S ${n.S} · W ${n.W} — ${total}/52 placed`;
-  id('e-bid').disabled = !full || isDraftSystem(); // Draft has no auction engine
+  id('e-bid').disabled = !full;
 }
 
 // PBN deal: "N:<N> <E> <S> <W>", each hand "spades.hearts.diamonds.clubs",
