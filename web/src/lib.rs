@@ -19,10 +19,13 @@ use contract_bridge::deal::PartialDeal;
 use contract_bridge::deck::{fill_deals, full_deal};
 use contract_bridge::eval::{self, HandEvaluator as _, SimpleEvaluator};
 use contract_bridge::{
-    AbsoluteVulnerability, Bid, Builder, Contract, FullDeal, Hand, Seat, Strain,
+    AbsoluteVulnerability, Bid, Builder, Contract, FullDeal, Hand, Seat, Strain, Suit,
 };
 use pons::bidding::agreements::{Agreements, TheirDisclosures};
 use pons::bidding::american::american_book;
+use pons::bidding::bridge_tool::{
+    HandFacts, OpeningSelection, eligible_openings, minor_exception_candidates, select_opening,
+};
 use pons::bidding::evaluator::trick_estimates;
 use pons::bidding::fallback::Fallback;
 use pons::bidding::features::ConventionCard;
@@ -46,7 +49,6 @@ struct HandJson {
 
 impl HandJson {
     fn new(hand: Hand) -> Self {
-        use contract_bridge::Suit;
         Self {
             spades: hand[Suit::Spades].to_string(),
             hearts: hand[Suit::Hearts].to_string(),
@@ -55,6 +57,117 @@ impl HandJson {
             hcp: SimpleEvaluator(eval::hcp::<u8>).eval(hand),
         }
     }
+}
+
+/// One suit's objective facts in display order.
+#[derive(Serialize)]
+struct OpeningSuitJson {
+    suit: String,
+    cards: String,
+    length: u8,
+    hcp: u8,
+}
+
+/// The classifier's selection result without adding any UI-side priority.
+#[derive(Serialize)]
+struct OpeningSelectionJson {
+    kind: &'static str,
+    openings: Vec<String>,
+}
+
+/// The complete read-only result shown by the BridgeTool opening audit.
+#[derive(Serialize)]
+struct OpeningAuditJson {
+    hand: HandJson,
+    suits: Vec<OpeningSuitJson>,
+    shape: [u8; 4],
+    singletons: Vec<String>,
+    voids: Vec<String>,
+    eligible_openings: Vec<String>,
+    selection: OpeningSelectionJson,
+    minor_exception_candidates: Vec<String>,
+}
+
+impl OpeningAuditJson {
+    fn new(hand: Hand) -> Self {
+        let facts = HandFacts::from(hand);
+        let suits = [Suit::Spades, Suit::Hearts, Suit::Diamonds, Suit::Clubs]
+            .into_iter()
+            .map(|suit| OpeningSuitJson {
+                suit: suit.to_string(),
+                cards: hand[suit].to_string(),
+                length: facts.length(suit),
+                hcp: facts.suit_hcp[suit as usize],
+            })
+            .collect();
+        let selection = match select_opening(hand) {
+            OpeningSelection::Selected(opening) => OpeningSelectionJson {
+                kind: "selected",
+                openings: vec![opening.to_string()],
+            },
+            OpeningSelection::NoMatch => OpeningSelectionJson {
+                kind: "no_match",
+                openings: Vec::new(),
+            },
+            OpeningSelection::Ambiguous(openings) => OpeningSelectionJson {
+                kind: "ambiguous",
+                openings: opening_names(openings),
+            },
+        };
+
+        Self {
+            hand: HandJson::new(hand),
+            suits,
+            shape: facts.shape,
+            singletons: facts
+                .singletons
+                .into_iter()
+                .map(|suit| suit.to_string())
+                .collect(),
+            voids: facts
+                .voids
+                .into_iter()
+                .map(|suit| suit.to_string())
+                .collect(),
+            eligible_openings: opening_names(eligible_openings(hand)),
+            selection,
+            minor_exception_candidates: opening_names(minor_exception_candidates(hand)),
+        }
+    }
+}
+
+fn opening_names(openings: Vec<pons::bidding::bridge_tool::Opening>) -> Vec<String> {
+    openings
+        .into_iter()
+        .map(|opening| opening.to_string())
+        .collect()
+}
+
+#[derive(Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum OpeningAuditResponse {
+    Ok { audit: OpeningAuditJson },
+    Error { message: &'static str },
+}
+
+/// Inspect one complete hand with the provisional BridgeTool opening audit.
+///
+/// This does not construct or change a Pons bidding system. The returned JSON
+/// keeps literal eligibility, explicit selection, and diagnostic-only minor
+/// exceptions separate so the browser cannot silently resolve an ambiguity.
+#[wasm_bindgen]
+#[must_use]
+pub fn opening_audit(text: &str) -> String {
+    let parsed = text.trim().parse::<Hand>();
+    let response = match parsed {
+        Ok(hand) if hand.len() == 13 => OpeningAuditResponse::Ok {
+            audit: OpeningAuditJson::new(hand),
+        },
+        _ => OpeningAuditResponse::Error {
+            message: "Enter one complete 13-card hand as spades.hearts.diamonds.clubs.",
+        },
+    };
+    serde_json::to_string(&response).expect("opening audit serialization")
 }
 
 /// The bot's opinion on one human call, recorded as it was given

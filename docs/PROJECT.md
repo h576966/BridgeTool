@@ -30,7 +30,8 @@ its Git history intact and remains the core crate and engine.
 - **BBA/EPBot adapter:** the pinned `vendor/bba` submodule and Pons examples for
   comparison with an external reference bidder.
 - **WebAssembly web app:** the existing local, client-side Pons interface for
-  practice, demos, book inspection, deal editing, and separate NS/EW profiles.
+  practice, demos, book inspection, deal editing, separate NS/EW profiles, and
+  read-only inspection of the provisional BridgeTool opening audit.
 - **Future BridgeTool system module:** the custom system, added only after its
   meanings and priorities are precise enough to implement and test.
 - **Future analysis and experiment tools:** coverage, overlap, frequency, and

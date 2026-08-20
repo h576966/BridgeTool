@@ -3,22 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>pons — bridge bidding</title>
+  <meta name="theme-color" content="#245f50">
+  <title>BridgeTool — bridge bidding lab</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>
-    <h1>pons</h1>
-    <nav>
-      <button data-tab="practice">Practice</button>
-      <button data-tab="demo">Demo</button>
-      <button data-tab="book">Book</button>
-      <button data-tab="edit">Edit</button>
-      <button data-tab="binky">Evaluate</button>
-      <button data-tab="settings">Settings</button>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="app-header">
+    <div class="brand">
+      <h1>BridgeTool</h1>
+      <span>Powered by Pons</span>
+    </div>
+    <nav aria-label="Main navigation">
+      <div class="nav-group" role="group" aria-label="Play and inspect">
+        <a href="#practice" data-tab="practice">Practice</a>
+        <a href="#demo" data-tab="demo">Demo</a>
+        <a href="#opening-audit" data-tab="opening-audit">Opening Audit</a>
+      </div>
+      <div class="nav-group nav-tools" role="group" aria-label="Tools and settings">
+        <a href="#book" data-tab="book">Book</a>
+        <a href="#edit" data-tab="edit">Edit</a>
+        <a href="#binky" data-tab="binky">Evaluate</a>
+        <a href="#settings" data-tab="settings">Settings</a>
+      </div>
     </nav>
   </header>
-  <main>
+  <main id="main-content">
     <section id="practice">
       <div class="controls">
         <label>Seat <select id="p-seat">
@@ -68,12 +78,33 @@
       </div>
       <div id="d-dd" class="panel ddpanel hidden"></div>
     </section>
+    <section id="opening-audit" class="hidden">
+      <div class="view-heading">
+        <p class="eyebrow">BridgeTool system lab</p>
+        <h2>Opening Audit</h2>
+        <p>Inspect one hand against the provisional opening classifier without changing
+          the Pons system used by Practice or Demo.</p>
+      </div>
+      <div class="panel audit-input-panel">
+        <label for="o-hand">Hand</label>
+        <div class="audit-controls">
+          <input id="o-hand" type="text" spellcheck="false"
+            value="AKQ2.3.KQJ2.8765" aria-describedby="o-format">
+          <button id="o-analyze" class="primary" type="button">Analyze</button>
+          <button id="o-random" class="secondary paper-action" type="button">Random hand</button>
+        </div>
+        <p id="o-format" class="hint">Use spades.hearts.diamonds.clubs, for example AKQ2.3.KQJ2.8765.</p>
+      </div>
+      <div id="o-error" class="panel error-panel hidden" role="alert"></div>
+      <div id="o-result" class="audit-result" aria-live="polite"></div>
+    </section>
     <section id="book" class="hidden">
       <div class="controls">
         <label>Partnership <select id="b-pair">
           <option value="ns" selected>North–South</option>
           <option value="ew">East–West</option>
         </select></label>
+        <label class="visually-hidden" for="b-filter">Filter book nodes</label>
         <input id="b-filter" type="search" placeholder="Filter by auction or rule text…">
         <span id="b-count" class="count"></span>
       </div>

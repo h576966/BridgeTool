@@ -4,6 +4,81 @@ fn parse(snapshot: &str) -> serde_json::Value {
     serde_json::from_str(snapshot).expect("snapshot is valid JSON")
 }
 
+#[test]
+fn opening_audit_serializes_objective_hand_facts() {
+    let json = parse(&opening_audit("AQ32.KJ54.Q432.2"));
+    let audit = &json["audit"];
+
+    assert_eq!(json["status"], "ok");
+    assert_eq!(audit["hand"]["hcp"], 12);
+    assert_eq!(audit["shape"], serde_json::json!([4, 4, 4, 1]));
+    assert_eq!(audit["singletons"], serde_json::json!(["♣"]));
+    assert_eq!(audit["voids"], serde_json::json!([]));
+    assert_eq!(audit["suits"][0]["suit"], "♠");
+    assert_eq!(audit["suits"][0]["length"], 4);
+    assert_eq!(audit["suits"][0]["hcp"], 6);
+}
+
+#[test]
+fn opening_audit_reports_selected_opening() {
+    let json = parse(&opening_audit("AQ32.KJ54.Q432.2"));
+    let audit = &json["audit"];
+
+    assert_eq!(audit["eligible_openings"], serde_json::json!(["1♦", "1NT"]));
+    assert_eq!(audit["selection"]["kind"], "selected");
+    assert_eq!(audit["selection"]["openings"], serde_json::json!(["1NT"]));
+}
+
+#[test]
+fn opening_audit_preserves_ambiguity() {
+    let json = parse(&opening_audit("AKQ2.3.KQJ2.8765"));
+    let audit = &json["audit"];
+
+    assert_eq!(audit["eligible_openings"], serde_json::json!(["1♦", "1♠"]));
+    assert_eq!(audit["selection"]["kind"], "ambiguous");
+    assert_eq!(
+        audit["selection"]["openings"],
+        serde_json::json!(["1♦", "1♠"])
+    );
+}
+
+#[test]
+fn opening_audit_keeps_no_match_distinct_from_pass() {
+    let json = parse(&opening_audit("AQ32.K32.J42.J32"));
+    let audit = &json["audit"];
+
+    assert_eq!(audit["eligible_openings"], serde_json::json!([]));
+    assert_eq!(audit["selection"]["kind"], "no_match");
+    assert_eq!(audit["selection"]["openings"], serde_json::json!([]));
+}
+
+#[test]
+fn opening_audit_marks_minor_exception_as_diagnostic_only() {
+    let json = parse(&opening_audit("32.3.5432.AKQJ87"));
+    let audit = &json["audit"];
+
+    assert_eq!(audit["eligible_openings"], serde_json::json!(["1♠"]));
+    assert_eq!(
+        audit["minor_exception_candidates"],
+        serde_json::json!(["2♣"])
+    );
+}
+
+#[test]
+fn opening_audit_rejects_malformed_and_short_hands() {
+    for text in ["not a hand", "AKQ.J.."] {
+        let json = parse(&opening_audit(text));
+        assert_eq!(json["status"], "error", "{text}");
+        assert!(
+            json["message"]
+                .as_str()
+                .expect("error message")
+                .contains("13-card hand"),
+            "{text}"
+        );
+    }
+}
+
 /// A par contract from a parseable string, its declarer, and its overtricks
 fn par_contract(text: &str, declarer: Seat, overtricks: i8) -> pons_dds::ParContract {
     pons_dds::ParContract {

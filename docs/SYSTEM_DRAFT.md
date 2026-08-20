@@ -1,9 +1,9 @@
 # Preliminary BridgeTool system draft
 
 > This remains a preliminary discussion document, not a complete executable
-> bidding system. The isolated opening audit below is implemented in Rust, but
-> it is not wired into Pons rules, inference, responses, rebids, or competitive
-> auctions.
+> bidding system. The isolated opening audit below is implemented in Rust and
+> exposed as a read-only web view, but it is not wired into Pons rules,
+> inference, responses, rebids, or competitive auctions.
 
 ## Implemented opening audit
 
@@ -66,6 +66,9 @@ undefined.
 The [probe program](../examples/probe-bridge-openings/main.rs) records its
 version, seed, and hand count; reports eligibility, selection, gaps, overlaps,
 and exception candidates; and retains only three sample hands per category.
+The web app's Opening Audit view calls the same pure classifier through a thin
+WASM JSON wrapper. It does not change the American system used by Practice or
+Demo.
 
 ## Preliminary continuation after 1♥
 

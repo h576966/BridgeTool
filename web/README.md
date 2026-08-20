@@ -1,8 +1,9 @@
-# pons-web
+# BridgeTool web (`pons-web` crate)
 
-The human-facing [pons](..) examples in the browser: practice bidding one seat
-against the 2/1 bots, watch them bid a random board, or browse the authored
-books.  Everything runs client-side as WebAssembly; there is no server.
+The BridgeTool browser shell over [pons](..): practice bidding one seat against
+the 2/1 bots, watch them bid a random board, inspect the provisional BridgeTool
+opening audit, or browse the authored books. Everything runs client-side as
+WebAssembly; there is no server.
 
 Double dummy runs in the browser too, via the pure-Rust
 [pons-dds](https://github.com/jdh8/pons-dds) (the native `pons/dd` feature
@@ -51,7 +52,7 @@ python3 -m http.server 8137
 # open http://localhost:8137/
 ```
 
-Five tabs:
+Seven views:
 
 - **Practice** — pick your seat, dealer, vulnerability, and a minimum HCP,
   then bid with the bidding box; the bots bid the other seats.  After each of
@@ -60,12 +61,19 @@ Five tabs:
   opponent reshuffles, and the full double-dummy table.
 - **Demo** — deal a random board and watch `american()` bid all four seats,
   then see the double-dummy table and the contract's actual-layout verdict.
+- **Opening Audit** — inspect one complete hand with the provisional pure
+  BridgeTool opening classifier. Eligibility, explicit selection, ambiguity,
+  no-match, and diagnostic-only 6–4 minor candidates stay separate. This view
+  does not change the Pons system used by Practice or Demo.
 - **Book** — the authored 2/1 books (constructive/competitive/defensive),
   every node's rules with weights and the constraints' own English
-  descriptions, filterable.  An NS/EW selector chooses which partnership's
-  current book is shown.
+  descriptions. Search renders the first matching nodes instead of placing the
+  entire book in the DOM. An NS/EW selector chooses which partnership's current
+  book is shown.
 - **Edit** — a PBN field two-way-synced with a card palette; build a deal by
   hand, then "Bid it out in Demo".
+- **Evaluate** — estimate tricks for two fixed N-S hands, price contracts, and
+  optionally verify the estimate over double-dummy East-West reshuffles.
 - **Settings** — toggle bidding conventions, grouped by area.  The whole tab is
   generated from the Rust registry (`describe_options()` in `src/lib.rs`), so a
   convention added there appears here automatically; mutually-exclusive families

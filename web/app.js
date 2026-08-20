@@ -1,6 +1,8 @@
 // Thin static UI over the pons wasm bidder: the engine holds the deal and the
 // auction; JS rebuilds the DOM from each JSON snapshot (gin-rummy pattern).
-import init, { WebTable, Binky, book, set_option, set_choice, describe_options } from './pkg/pons_web.js';
+import init, {
+  WebTable, Binky, book, opening_audit, set_option, set_choice, describe_options,
+} from './pkg/pons_web.js';
 
 const SEATS = ['N', 'E', 'S', 'W'];
 const SEAT_NAMES = { N: 'North', E: 'East', S: 'South', W: 'West' };
@@ -16,7 +18,7 @@ const ORACLE_CHUNK = 2; // per JS task, so the page keeps painting between them
 let game;
 let current = null; // the snapshot on screen
 let boardCount = 0; // practice deals so far — drives the "Rotate" dealer
-let bookNodes = null; // [{el, haystack}] for the selected partnership
+let bookNodes = null; // [{node, haystack, seqHay}] for the selected partnership
 let bookPair = 'ns';
 let demoTimer = 0;
 let boardGen = 0; // bumped per deal; stale async DD/oracle loops check it
@@ -34,9 +36,6 @@ async function main() {
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stored)); // persist legacy migration
   buildBiddingBox();
-  for (const b of document.querySelectorAll('nav button')) {
-    b.onclick = () => { location.hash = b.dataset.tab; };
-  }
   window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
   id('p-deal').onclick = dealPractice;
   id('p-hint-on').onchange = renderHint;
@@ -44,18 +43,24 @@ async function main() {
   id('d-edit').onclick = editDemo;
   id('b-filter').oninput = filterBook;
   id('b-pair').onchange = (ev) => { bookPair = ev.target.value; loadBook(); };
+  initOpeningAudit();
   initEdit();
   initBinky();
   showTab(location.hash.slice(1));
 }
 
 function showTab(tab) {
-  if (!['practice', 'demo', 'book', 'edit', 'binky', 'settings'].includes(tab)) tab = 'practice';
+  if (!['practice', 'demo', 'opening-audit', 'book', 'edit', 'binky', 'settings'].includes(tab)) {
+    tab = 'practice';
+  }
   for (const sec of document.querySelectorAll('main > section')) {
     sec.classList.toggle('hidden', sec.id !== tab);
   }
-  for (const b of document.querySelectorAll('nav button')) {
-    b.classList.toggle('active', b.dataset.tab === tab);
+  for (const link of document.querySelectorAll('nav [data-tab]')) {
+    const active = link.dataset.tab === tab;
+    link.classList.toggle('active', active);
+    if (active) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
   }
   if (tab === 'book' && !bookNodes) loadBook();
   if (tab === 'settings' && !settingsBuilt) renderSettings();
@@ -334,35 +339,127 @@ function updateBiddingBox(s) {
   id('p-bidbox').classList.toggle('inactive', !active);
 }
 
+// --- BridgeTool opening audit -------------------------------------------------
+
+function initOpeningAudit() {
+  id('o-analyze').onclick = renderOpeningAudit;
+  id('o-random').onclick = () => {
+    const assign = randomDeal();
+    id('o-hand').value = HAND_ORDER.map((g) =>
+      RANKS.filter((r) => assign[g + r] === 'N').join('')).join('.');
+    renderOpeningAudit();
+  };
+  id('o-hand').onkeydown = (ev) => {
+    if (ev.key === 'Enter') renderOpeningAudit();
+  };
+  renderOpeningAudit();
+}
+
+function renderOpeningAudit() {
+  const input = id('o-hand');
+  const response = JSON.parse(opening_audit(input.value));
+  const error = id('o-error');
+  const result = id('o-result');
+
+  error.classList.toggle('hidden', response.status !== 'error');
+  input.toggleAttribute('aria-invalid', response.status === 'error');
+  if (response.status === 'error') {
+    error.textContent = response.message;
+    result.replaceChildren();
+    return;
+  }
+
+  const audit = response.audit;
+  const selection = audit.selection;
+  const statusClass = selection.kind === 'no_match' ? 'no-match' : selection.kind;
+  const statusLabel = {
+    selected: 'Selected',
+    ambiguous: 'Ambiguous',
+    no_match: 'No match',
+  }[selection.kind];
+  const selectionHeading = selection.openings.length
+    ? selection.openings.map(colorizeCalls).join(' or ')
+    : 'No opening selected';
+  const selectionCopy = {
+    selected: 'The classifier’s explicit priority rules select this opening.',
+    ambiguous: 'Several literal candidates remain. The audit does not invent a priority.',
+    no_match: 'No implemented opening matched. This is not a decision to pass.',
+  }[selection.kind];
+  const suitRows = audit.suits.map((suit) =>
+    `<tr><td><span class="${SUIT_CLASS[suit.suit]}">${suit.suit}</span> ` +
+      `${escapeHTML(suit.cards) || '—'}</td><td>${suit.length}</td><td>${suit.hcp}</td></tr>`,
+  ).join('');
+  const shortSuits = (suits) => suits.length ? suits.map(colorizeCalls).join(' ') : 'None';
+
+  result.innerHTML = `
+    <div class="panel audit-summary">
+      <div class="panel-title">Explicit selection</div>
+      <div class="audit-status-row">
+        <span class="status-chip ${statusClass}">${statusLabel}</span>
+        <strong>${selectionHeading}</strong>
+      </div>
+      <p>${selectionCopy}</p>
+      <strong>Literal eligibility</strong>
+      ${auditCallList(audit.eligible_openings)}
+    </div>
+    <div class="panel audit-hand">
+      <h3>Hand · ${audit.hand.hcp} HCP</h3>
+      ${handHTML(audit.hand)}
+    </div>
+    <div class="panel audit-facts">
+      <h3>Objective hand facts</h3>
+      <div class="fact-grid">
+        <div><span class="fact-label">Shape</span><span class="fact-value">${audit.shape.join('–')}</span></div>
+        <div><span class="fact-label">Singletons</span><span class="fact-value">${shortSuits(audit.singletons)}</span></div>
+        <div><span class="fact-label">Voids</span><span class="fact-value">${shortSuits(audit.voids)}</span></div>
+      </div>
+      <table class="suit-facts">
+        <thead><tr><th>Suit and cards</th><th>Length</th><th>HCP</th></tr></thead>
+        <tbody>${suitRows}</tbody>
+      </table>
+      <div class="audit-diagnostic">
+        <strong>Possible 6–4 minor exceptions · diagnostic only</strong>
+        ${auditCallList(audit.minor_exception_candidates)}
+        <p class="hint">These candidates are shape-only and are not included in opening eligibility.</p>
+      </div>
+    </div>`;
+}
+
+function auditCallList(calls) {
+  if (!calls.length) return '<span class="hint">None</span>';
+  return `<div class="call-list">${calls.map((call) =>
+    `<span class="call-chip">${colorizeCalls(call)}</span>`).join('')}</div>`;
+}
+
 // --- book browser --------------------------------------------------------------
 
 function loadBook() {
   const nodes = JSON.parse(book(bookPair));
-  const frag = document.createDocumentFragment();
-  id('b-results').replaceChildren();
   bookNodes = nodes.map((node) => {
-    const el = document.createElement('div');
-    el.className = 'node panel';
-    const rules = node.rules.map((r) =>
-      `<div class="rule"><span class="call">${colorizeCalls(r.call)}</span>` +
-      `<span class="weight">w${fmtWeight(r.weight)}</span>` +
-      `<span class="ruletext">${escapeHTML(r.text)}</span>` +
-      (r.label ? `<span class="tag">${escapeHTML(r.label)}</span>` : '') +
-      '</div>',
-    ).join('') +
-      (node.note ? `<div class="rule"><span class="ruletext">${escapeHTML(node.note)}</span></div>` : '');
-    el.innerHTML =
-      `<div class="node-head"><span class="badge ${node.book}">${node.book}</span>` +
-      `<span class="node-auction">${colorizeCalls(node.auction)}</span></div>${rules}`;
-    frag.appendChild(el);
     const haystack =
       (node.auction + ' ' + node.rules.map((r) => `${r.call} ${r.text}`).join(' ') +
         (node.note ? ' ' + node.note : '')).toLowerCase();
     const seqHay = normSeq(node.auction + ' ' + node.rules.map((r) => r.call).join(' '));
-    return { el, haystack, seqHay };
+    return { node, haystack, seqHay };
   });
-  id('b-results').appendChild(frag);
   filterBook();
+}
+
+function bookNodeElement(node) {
+  const el = document.createElement('div');
+  el.className = 'node panel';
+  const rules = node.rules.map((r) =>
+    `<div class="rule"><span class="call">${colorizeCalls(r.call)}</span>` +
+    `<span class="weight">w${fmtWeight(r.weight)}</span>` +
+    `<span class="ruletext">${escapeHTML(r.text)}</span>` +
+    (r.label ? `<span class="tag">${escapeHTML(r.label)}</span>` : '') +
+    '</div>',
+  ).join('') +
+    (node.note ? `<div class="rule"><span class="ruletext">${escapeHTML(node.note)}</span></div>` : '');
+  el.innerHTML =
+    `<div class="node-head"><span class="badge ${node.book}">${node.book}</span>` +
+    `<span class="node-auction">${colorizeCalls(node.auction)}</span></div>${rules}`;
+  return el;
 }
 
 // Fuzzy sequence normalizer for the book filter: ASCII shorthand ↔ book glyphs.
@@ -380,14 +477,30 @@ function normSeq(s) {
 function filterBook() {
   if (!bookNodes) return;
   const q = id('b-filter').value.trim().toLowerCase();
-  const seq = normSeq(q);
-  let n = 0;
-  for (const { el, haystack, seqHay } of bookNodes) {
-    const show = !q || haystack.includes(q) || seqHay.includes(seq);
-    el.classList.toggle('hidden', !show);
-    if (show) n++;
+  const results = id('b-results');
+  if (!q) {
+    id('b-count').textContent = `${bookNodes.length.toLocaleString()} nodes`;
+    results.innerHTML = `<div class="panel book-empty"><strong>Search the authored book</strong>
+      <span class="hint">Enter an auction, call, or rule phrase to inspect matching nodes.</span></div>`;
+    return;
   }
-  id('b-count').textContent = `${n} node${n === 1 ? '' : 's'}`;
+
+  const seq = normSeq(q);
+  const matches = bookNodes.filter(({ haystack, seqHay }) =>
+    haystack.includes(q) || seqHay.includes(seq));
+  const visible = matches.slice(0, 80);
+  if (!visible.length) {
+    results.innerHTML = `<div class="panel book-empty"><strong>No matching nodes</strong>
+      <span class="hint">Try a shorter auction or a different rule phrase.</span></div>`;
+    id('b-count').textContent = '0 nodes';
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  for (const { node } of visible) frag.appendChild(bookNodeElement(node));
+  results.replaceChildren(frag);
+  id('b-count').textContent = matches.length > visible.length
+    ? `${matches.length.toLocaleString()} nodes · showing first ${visible.length}`
+    : `${matches.length} node${matches.length === 1 ? '' : 's'}`;
 }
 
 // Weights arrive as integral centinats (the engine's unit); nats read better.
@@ -609,9 +722,10 @@ function renderSettings() {
     if (!bySection.has(opt.section)) { bySection.set(opt.section, []); order.push(opt.section); }
     bySection.get(opt.section).push(opt);
   }
-  id('s-options').innerHTML = order.map((name) =>
-    `<div class="panel"><div class="panel-title">${escapeHTML(name)}</div><div class="optlist">` +
-    bySection.get(name).map(optHTML).join('') + '</div></div>',
+  id('s-options').innerHTML = order.map((name, index) =>
+    `<details class="panel settings-group"${index === 0 ? ' open' : ''}>` +
+    `<summary>${escapeHTML(name)}</summary><div class="optlist">` +
+    bySection.get(name).map(optHTML).join('') + '</div></details>',
   ).join('');
 
   id('settings').addEventListener('change', (ev) => {
