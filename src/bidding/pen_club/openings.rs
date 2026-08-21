@@ -49,7 +49,14 @@ pub(super) fn limited_one_spade() -> Cons<impl Constraint + Clone> {
 
 pub(super) fn rules() -> Rules {
     let strong_spade = strong_one_spade();
-    let one_diamond = hcp(10..=15) & !balanced() & len(Suit::Spades, 4..) & !one_notrump();
+    let five_two_three_three = len(Suit::Spades, 5..=5)
+        & len(Suit::Hearts, 2..=2)
+        & len(Suit::Diamonds, 3..=3)
+        & len(Suit::Clubs, 3..=3);
+    let one_diamond = hcp(10..=15)
+        & (!balanced() | five_two_three_three)
+        & len(Suit::Spades, 4..)
+        & !one_notrump();
     let one_heart = hcp(10..=15)
         & !balanced()
         & len(Suit::Hearts, 4..)

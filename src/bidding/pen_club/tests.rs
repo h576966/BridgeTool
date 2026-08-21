@@ -301,6 +301,16 @@ fn artificial_calls_are_explicitly_alerted() {
             ],
         ),
         (
+            vec![call(1, Strain::Diamonds), pass],
+            vec![
+                call(3, Strain::Notrump),
+                call(4, Strain::Clubs),
+                call(4, Strain::Diamonds),
+                call(4, Strain::Hearts),
+                call(4, Strain::Notrump),
+            ],
+        ),
+        (
             vec![call(1, Strain::Hearts), pass],
             vec![
                 call(1, Strain::Spades),
@@ -308,6 +318,10 @@ fn artificial_calls_are_explicitly_alerted() {
                 call(2, Strain::Clubs),
                 call(2, Strain::Diamonds),
                 call(2, Strain::Notrump),
+                call(3, Strain::Notrump),
+                call(4, Strain::Clubs),
+                call(4, Strain::Diamonds),
+                call(4, Strain::Notrump),
             ],
         ),
         (
@@ -317,6 +331,8 @@ fn artificial_calls_are_explicitly_alerted() {
                 call(2, Strain::Clubs),
                 call(2, Strain::Diamonds),
                 call(2, Strain::Hearts),
+                call(2, Strain::Spades),
+                call(2, Strain::Notrump),
             ],
         ),
         (
@@ -327,6 +343,9 @@ fn artificial_calls_are_explicitly_alerted() {
                 call(2, Strain::Hearts),
                 call(2, Strain::Spades),
                 call(2, Strain::Notrump),
+                call(4, Strain::Diamonds),
+                call(4, Strain::Hearts),
+                call(4, Strain::Notrump),
             ],
         ),
         (
@@ -432,6 +451,28 @@ fn one_diamond_finds_spades_after_a_low_overcall() {
 }
 
 #[test]
+fn direct_three_notrump_shows_exactly_three_card_support() {
+    let system = partnership();
+    let pass = Call::Pass;
+    assert_eq!(
+        best(
+            &system,
+            &[call(1, Strain::Diamonds), pass],
+            "KQ3.AT3.KJ32.Q32",
+        ),
+        call(3, Strain::Notrump),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[call(1, Strain::Hearts), pass],
+            "KQ3.AT3.KJ32.Q32",
+        ),
+        call(3, Strain::Notrump),
+    );
+}
+
+#[test]
 fn one_spade_preferences_and_transfers_are_playable() {
     let system = partnership();
     let one_spade = call(1, Strain::Spades);
@@ -459,6 +500,48 @@ fn one_spade_preferences_and_transfers_are_playable() {
             "432.32.AKQJ.AJ87",
         ),
         call(2, Strain::Hearts),
+    );
+}
+
+#[test]
+fn one_spade_asks_disclose_both_branches_and_transfers_break_exactly() {
+    let system = partnership();
+    let one_spade = call(1, Strain::Spades);
+    let pass = Call::Pass;
+
+    assert_eq!(
+        best(&system, &[one_spade, pass], "KQ3.AJ2.Q43.J432"),
+        call(2, Strain::Spades),
+    );
+    assert_eq!(
+        best(&system, &[one_spade, pass], "KQ3.AT2.Q43.KJ32"),
+        call(2, Strain::Notrump),
+    );
+
+    let general_ask = [one_spade, pass, call(2, Strain::Spades), pass];
+    for (text, expected) in [
+        ("432.32.AKQJ.AJ87", call(2, Strain::Notrump)),
+        ("32.32.AKQJ.AJ987", call(3, Strain::Clubs)),
+        ("32.AKQ2.3.AKQJ87", call(3, Strain::Hearts)),
+        ("AKQ2.32.3.AKQJ87", call(3, Strain::Spades)),
+        ("32.32.AKQ2.AKQJ8", call(3, Strain::Diamonds)),
+        ("AQ3.K32.32.AKQJ8", call(3, Strain::Notrump)),
+    ] {
+        assert_eq!(best(&system, &general_ask, text), expected, "{text}");
+    }
+
+    let heart_transfer = [one_spade, pass, call(2, Strain::Diamonds), pass];
+    assert_eq!(
+        best(&system, &heart_transfer, "KQ.A32.KJ87.QT32"),
+        call(3, Strain::Hearts),
+    );
+    assert_eq!(
+        best(&system, &heart_transfer, "KQ.A32.QJ87.JT32"),
+        call(2, Strain::Hearts),
+    );
+    assert_eq!(
+        best(&system, &heart_transfer, "AQ3.K32.2.AKQJ87"),
+        call(2, Strain::Notrump),
     );
 }
 
@@ -496,7 +579,7 @@ fn one_notrump_stayman_and_transfers_complete() {
 
     assert_eq!(
         best(&system, &[one_nt, pass], "32.32.432.AKQJ87"),
-        call(2, Strain::Spades),
+        call(3, Strain::Clubs),
     );
     assert_eq!(
         best(
@@ -505,6 +588,58 @@ fn one_notrump_stayman_and_transfers_complete() {
             "AQ3.KJ2.J43.Q432",
         ),
         call(3, Strain::Clubs),
+    );
+}
+
+#[test]
+fn one_notrump_answers_superaccepts_texas_and_quantitative_are_exact() {
+    let system = partnership();
+    let one_nt = call(1, Strain::Notrump);
+    let pass = Call::Pass;
+    let stayman = [one_nt, pass, call(2, Strain::Clubs), pass];
+
+    assert_eq!(
+        best(&system, &stayman, "AQ3.KJ42.J43.Q32"),
+        call(2, Strain::Hearts),
+    );
+    assert_eq!(
+        best(&system, &stayman, "KJ42.AQ3.J43.Q32"),
+        call(2, Strain::Spades),
+    );
+
+    let heart_transfer = [one_nt, pass, call(2, Strain::Diamonds), pass];
+    assert_eq!(
+        best(&system, &heart_transfer, "KQ3.AJ42.K43.Q32"),
+        call(3, Strain::Hearts),
+    );
+    assert_eq!(
+        best(&system, &heart_transfer, "KQ3.AJ42.Q43.Q32"),
+        call(2, Strain::Hearts),
+    );
+
+    assert_eq!(
+        best(&system, &[one_nt, pass], "A32.KQJ987.32.32"),
+        call(4, Strain::Diamonds),
+    );
+    assert_eq!(
+        best(&system, &[one_nt, pass], "AQ3.KJ2.KQ3.KJ32"),
+        call(4, Strain::Notrump),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[one_nt, pass, call(4, Strain::Notrump), pass],
+            "KQ3.AJ42.K43.Q32",
+        ),
+        call(6, Strain::Notrump),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[one_nt, pass, call(4, Strain::Notrump), pass],
+            "KQ3.AJ42.Q43.Q32",
+        ),
+        Call::Pass,
     );
 }
 
@@ -525,7 +660,250 @@ fn natural_two_major_overcalls_get_only_the_provisional_natural_policy() {
             &[call(1, Strain::Notrump), call(2, Strain::Spades)],
             "32.KQJ2.432.5432",
         ),
+        Call::Pass,
+    );
+}
+
+#[test]
+fn exact_five_two_three_three_opens_one_diamond() {
+    let text = "AKQJ2.32.432.432";
+    assert_eq!(
+        select_opening(hand(text)),
+        OpeningSelection::Selected(Opening::OneDiamond),
+    );
+    assert_eq!(best(&partnership(), &[], text), call(1, Strain::Diamonds));
+}
+
+#[test]
+fn thirteen_point_minimum_and_maximum_split_uses_shape() {
+    let system = partnership();
+    let pass = Call::Pass;
+
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(2, Strain::Diamonds),
+                pass,
+                call(2, Strain::Hearts),
+                pass
+            ],
+            "KQ2.A32.KJ9876.2",
+        ),
         call(3, Strain::Hearts),
+        "3-3-6-1 has only nine cards in its two longest suits",
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(2, Strain::Diamonds),
+                pass,
+                call(2, Strain::Hearts),
+                pass
+            ],
+            "KQ.A32.KJ98765.2",
+        ),
+        call(2, Strain::Spades),
+        "2-3-7-1 has ten cards in its two longest suits",
+    );
+
+    assert_eq!(
+        best(
+            &system,
+            &[call(1, Strain::Hearts), pass, call(1, Strain::Spades), pass],
+            "KQ2.AJ432.QJ32.2",
+        ),
+        call(1, Strain::Notrump),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[call(1, Strain::Hearts), pass, call(1, Strain::Spades), pass],
+            "KQ.AJ5432.QJ32.2",
+        ),
+        call(2, Strain::Hearts),
+    );
+
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(1, Strain::Spades),
+                pass,
+                call(1, Strain::Notrump),
+                pass
+            ],
+            "KQ.A2.QJ987.J432",
+        ),
+        call(2, Strain::Diamonds),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(1, Strain::Spades),
+                pass,
+                call(1, Strain::Notrump),
+                pass
+            ],
+            "KQ.A.J9876.QJ432",
+        ),
+        call(3, Strain::Diamonds),
+    );
+}
+
+#[test]
+fn pen_fallback_respects_game_force_and_slam_ceiling() {
+    let system = partnership();
+    let pass = Call::Pass;
+    let gf = [
+        call(1, Strain::Clubs),
+        pass,
+        call(1, Strain::Hearts),
+        pass,
+        call(1, Strain::Notrump),
+        pass,
+    ];
+    let logits = system
+        .classify(hand("KQJ87.A32.432.32"), RelativeVulnerability::NONE, &gf)
+        .expect("PEN-safe fallback covers the GF continuation");
+    assert_eq!(logits.0[Call::Pass], f32::NEG_INFINITY);
+
+    let off_book = [
+        call(1, Strain::Diamonds),
+        pass,
+        call(1, Strain::Notrump),
+        pass,
+        call(2, Strain::Clubs),
+        pass,
+    ];
+    let logits = system
+        .classify(
+            hand("AKQJ2.32.432.432"),
+            RelativeVulnerability::NONE,
+            &off_book,
+        )
+        .expect("PEN-safe fallback covers an unspecified natural continuation");
+    assert_eq!(logits.0[call(4, Strain::Notrump)], f32::NEG_INFINITY,);
+    assert_eq!(logits.0[Call::Double], f32::NEG_INFINITY);
+    assert_eq!(logits.0[Call::Redouble], f32::NEG_INFINITY);
+    for level in 1..=7 {
+        for strain in Strain::ASC {
+            let candidate = Bid::new(level, strain);
+            let above_game = match strain {
+                Strain::Clubs | Strain::Diamonds => level > 5,
+                Strain::Hearts | Strain::Spades => level > 4,
+                Strain::Notrump => level > 3,
+            };
+            if above_game {
+                assert_eq!(logits.0[Call::Bid(candidate)], f32::NEG_INFINITY);
+            }
+        }
+    }
+}
+
+#[test]
+fn pen_fallback_uses_combined_hcp_for_a_no_fit_invitation() {
+    let system = partnership();
+    let pass = Call::Pass;
+    let invitation = [
+        call(1, Strain::Notrump),
+        pass,
+        call(2, Strain::Diamonds),
+        pass,
+        call(2, Strain::Hearts),
+        pass,
+        call(2, Strain::Notrump),
+        pass,
+    ];
+
+    let minimum = system
+        .classify(
+            hand("KQ3.AJ2.Q43.J432"),
+            RelativeVulnerability::NONE,
+            &invitation,
+        )
+        .expect("the fallback covers an invitation");
+    assert!(minimum.0[Call::Pass].is_finite());
+
+    let maximum = system
+        .classify(
+            hand("KQ3.AT2.Q43.KJ32"),
+            RelativeVulnerability::NONE,
+            &invitation,
+        )
+        .expect("the fallback covers an invitation");
+    assert_eq!(maximum.0[Call::Pass], f32::NEG_INFINITY);
+}
+
+#[test]
+fn rkcb_and_interference_answers_are_alerted() {
+    let system = pen_club_book_default();
+    let pass = Call::Pass;
+    assert_alerted_at(
+        &system.constructive.0,
+        &[call(1, Strain::Diamonds), pass],
+        &[call(4, Strain::Notrump)],
+    );
+    assert_alerted_at(
+        &system.constructive.0,
+        &[
+            call(1, Strain::Clubs),
+            pass,
+            call(1, Strain::Hearts),
+            pass,
+            call(2, Strain::Hearts),
+            pass,
+        ],
+        &[call(4, Strain::Notrump), call(5, Strain::Clubs)],
+    );
+    assert_alerted_at(
+        &system.constructive.0,
+        &[
+            call(1, Strain::Diamonds),
+            pass,
+            call(4, Strain::Notrump),
+            pass,
+        ],
+        &[
+            call(5, Strain::Clubs),
+            call(5, Strain::Diamonds),
+            call(5, Strain::Hearts),
+            call(5, Strain::Spades),
+        ],
+    );
+    assert_alerted_at(
+        &system.constructive.0,
+        &[
+            call(1, Strain::Diamonds),
+            pass,
+            call(4, Strain::Notrump),
+            Call::Double,
+        ],
+        &[Call::Pass, Call::Redouble],
+    );
+}
+
+#[test]
+fn confirmed_natural_defenses_have_authored_actions() {
+    let opponents = american_book(&Agreements::default()).bind();
+    let system = partnership().with_opponents(&opponents);
+    assert_eq!(
+        best(&system, &[call(1, Strain::Clubs)], "KQJ2.AJ32.QJ32.2",),
+        Call::Double,
+    );
+    assert_eq!(
+        best(&system, &[call(1, Strain::Clubs)], "KQ2.AJ2.QJ32.K32",),
+        call(1, Strain::Notrump),
+    );
+    assert_eq!(
+        best(&system, &[call(1, Strain::Notrump)], "KQJ87.AJ32.32.32",),
+        call(2, Strain::Clubs),
+    );
+    assert_eq!(
+        best(&system, &[call(3, Strain::Hearts)], "KQJ2.2.AJ32.KQJ2",),
+        Call::Double,
     );
 }
 

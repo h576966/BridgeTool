@@ -1456,7 +1456,7 @@ pub fn upgrade(hand: Hand) -> u8 {
 
 /// Total length of the two longest suits — the shape kernel shared by
 /// [`upgrade`] and the rule-of-N+8 [`PointScale`]
-fn longest_two_suits(hand: Hand) -> u8 {
+pub(crate) fn longest_two_suits(hand: Hand) -> u8 {
     let mut lengths = Suit::ASC.map(|suit| hand[suit].len());
     lengths.sort_unstable();
     // Two suit lengths total at most 26, so the cast cannot truncate.
@@ -2355,6 +2355,19 @@ pub(crate) fn shapes(
         label: label.into(),
         boxes,
     })
+}
+
+/// The two longest suits contain at most `maximum` cards in total.
+///
+/// PEN-Club uses this boundary to split a raw 13-count between the minimum and
+/// maximum half of a limited opening. The predicate remains exact at selection
+/// time; its non-rectangular shape is deliberately left opaque to the envelope
+/// reader instead of expanding into hundreds of boxes.
+pub(crate) fn longest_two_at_most(maximum: u8) -> Cons<impl Constraint + Clone> {
+    described(
+        format!("at most {maximum} cards in the two longest suits"),
+        move |hand: Hand, _: &Context<'_>| longest_two_suits(hand) <= maximum,
+    )
 }
 
 /// The exact staircase union for "`a` outnumbers `b` by at least `gap`":

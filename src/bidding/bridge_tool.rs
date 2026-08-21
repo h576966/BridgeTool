@@ -15,7 +15,7 @@ use contract_bridge::{Hand, Suit};
 pub enum Opening {
     /// 1♣: 16+ HCP, except the 16–19 HCP strong-club 1♠ shape.
     OneClub,
-    /// 1♦: 10–15 HCP, 4+ spades, and unbalanced.
+    /// 1♦: 10–15 HCP, 4+ spades, normally unbalanced, including 5-2-3-3.
     OneDiamond,
     /// 1♥: 10–15 HCP, 4+ hearts, fewer than four spades, and unbalanced.
     OneHeart,
@@ -238,7 +238,13 @@ fn is_eligible(opening: Opening, facts: &HandFacts) -> bool {
             facts.hcp >= 16 && !is_strong_club_one_spade(facts) && !is_two_notrump(facts)
         }
         Opening::OneDiamond => {
-            hcp_10_to_15 && facts.length(Suit::Spades) >= 4 && facts.is_unbalanced()
+            hcp_10_to_15
+                && facts.length(Suit::Spades) >= 4
+                && (facts.is_unbalanced()
+                    || (facts.length(Suit::Spades) == 5
+                        && facts.length(Suit::Hearts) == 2
+                        && facts.length(Suit::Diamonds) == 3
+                        && facts.length(Suit::Clubs) == 3))
         }
         Opening::OneHeart => {
             hcp_10_to_15

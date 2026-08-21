@@ -3,7 +3,7 @@
 The BridgeTool browser shell over [pons](..) has two explicit app profiles:
 the complete **Pons American** bidder and the playable **PEN-Club** draft.
 Both power practice, demos, editing, and book inspection. PEN-Club distinguishes
-source-backed authored nodes from the deterministic fallback that completes
+source-backed authored nodes from its PEN-safe natural fallback that completes
 uncovered auctions. Everything runs client-side as WebAssembly; there is no
 server.
 
@@ -76,7 +76,7 @@ Seven views:
   descriptions. Search renders the first matching nodes instead of placing the
   entire book in the DOM. An NS/EW selector chooses which partnership's current
   book is shown. PEN-Club exposes its authored constructive, competitive, and
-  defensive nodes; deterministic fallback calls are intentionally absent.
+  defensive nodes; PEN-safe fallback calls are intentionally absent.
 - **Edit** — a PBN field two-way-synced with a card palette; build a deal by
   hand, then bid it out with the selected system or evaluate it.
 - **Evaluate** — estimate tricks for two fixed N-S hands, price contracts, and
