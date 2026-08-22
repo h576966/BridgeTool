@@ -253,7 +253,7 @@ fn selecting_pen_club_changes_the_real_bidder_and_clears_the_board() {
 
     let pons = parse(&table.deal_pbn(PBN, "N", "none"));
     let pons_opening = pons["auction"][0].clone();
-    assert!(table.set_system_profile("pen-club"));
+    assert!(table.set_system_profile("ns", "pen-club"));
     assert_eq!(table.snapshot(), "null", "switching invalidates the board");
 
     let pen = parse(&table.deal_pbn(PBN, "N", "none"));
@@ -261,7 +261,10 @@ fn selecting_pen_club_changes_the_real_bidder_and_clears_the_board() {
     assert_ne!(pen["auction"][0], pons_opening);
 
     let before = table.snapshot();
-    assert!(!table.set_system_profile("not-a-system"));
+    assert!(table.set_system_profile("ns", "pen-club"));
+    assert_eq!(table.snapshot(), before, "reselecting is a no-op");
+    assert!(!table.set_system_profile("ns", "not-a-system"));
+    assert!(!table.set_system_profile("not-a-pair", "pons-american"));
     assert_eq!(table.snapshot(), before, "an invalid profile is a no-op");
 }
 
@@ -269,7 +272,8 @@ fn selecting_pen_club_changes_the_real_bidder_and_clears_the_board() {
 fn pen_club_practice_demo_and_editor_deal_complete() {
     const PBN: &str = "N:Q2.K3.AQ4.KQ8765 AKJT9.AQJ.KJT.A9 876.T987.987.JT4 543.6542.6532.32";
     let mut table = WebTable::new("12345");
-    assert!(table.set_system_profile("pen-club"));
+    assert!(table.set_system_profile("ns", "pen-club"));
+    assert!(table.set_system_profile("ew", "pen-club"));
 
     let mut practice = parse(&table.deal_practice("S", "N", "none", 0));
     for _ in 0..100 {
@@ -342,10 +346,14 @@ fn settings_are_partnership_scoped() {
 #[test]
 fn opponent_disclosures_are_derived_from_their_profile() {
     set_choice("ew", "notrump_defense", "woolsey");
-    let [ns, ew] = declared_agreements();
+    let [ns, ew] = declared_agreements([WebSystemProfile::PonsAmerican; 2]);
     assert!(ns.decision.their.two_clubs_landy);
     assert!(ns.decision.their.two_diamonds_multi);
     assert_eq!(ew.decision.their, TheirDisclosures::default());
+
+    let [ns, _] = declared_agreements([WebSystemProfile::PonsAmerican, WebSystemProfile::PenClub]);
+    assert!(ns.decision.their.two_clubs_landy);
+    assert!(!ns.decision.their.two_diamonds_multi);
     set_choice("ew", "notrump_defense", "natural");
 }
 
@@ -354,7 +362,7 @@ fn asymmetric_table_reads_the_opponents_actual_book() {
     use contract_bridge::Suit;
 
     set_choice("ew", "notrump_defense", "woolsey");
-    let (ns, ew) = partnerships(WebSystemProfile::PonsAmerican);
+    let (ns, ew) = partnerships([WebSystemProfile::PonsAmerican; 2]);
     let table = Table::new(ns, ew, Seat::North, AbsoluteVulnerability::NONE);
     let auction = [
         Call::Bid(Bid::new(1, Strain::Notrump)),
@@ -368,6 +376,50 @@ fn asymmetric_table_reads_the_opponents_actual_book() {
 }
 
 #[test]
+fn pons_reads_pen_club_openings_and_landy_from_the_actual_book() {
+    use contract_bridge::Suit;
+
+    let (ns, ew) = partnerships([WebSystemProfile::PonsAmerican, WebSystemProfile::PenClub]);
+    let opening = ns.infer(
+        contract_bridge::auction::RelativeVulnerability::NONE,
+        &[
+            Call::Bid(Bid::new(1, Strain::Diamonds)),
+            Call::Pass,
+            Call::Pass,
+        ],
+    );
+    assert!(opening.get(Relative::Lho).length(Suit::Spades).min >= 4);
+    assert_eq!(opening.get(Relative::Lho).length(Suit::Diamonds).min, 0);
+
+    let table = Table::new(ns, ew, Seat::North, AbsoluteVulnerability::NONE);
+    let landy = table.infer(&[
+        Call::Bid(Bid::new(1, Strain::Notrump)),
+        Call::Bid(Bid::new(2, Strain::Clubs)),
+    ]);
+    let rho = landy.get(Relative::Rho);
+    assert!(rho.length(Suit::Hearts).min >= 4);
+    assert!(rho.length(Suit::Spades).min >= 4);
+}
+
+#[test]
+fn every_ns_ew_profile_combination_completes() {
+    const PBN: &str = "N:Q2.K3.AQ4.KQ8765 AKJT9.AQJ.KJT.A9 876.T987.987.JT4 543.6542.6532.32";
+    for ns in [WebSystemProfile::PonsAmerican, WebSystemProfile::PenClub] {
+        for ew in [WebSystemProfile::PonsAmerican, WebSystemProfile::PenClub] {
+            let mut table = WebTable::new("1");
+            let name = |profile| match profile {
+                WebSystemProfile::PonsAmerican => "pons-american",
+                WebSystemProfile::PenClub => "pen-club",
+            };
+            assert!(table.set_system_profile("ns", name(ns)));
+            assert!(table.set_system_profile("ew", name(ew)));
+            let snapshot = parse(&table.deal_pbn(PBN, "N", "none"));
+            assert_eq!(snapshot["ended"], true, "{ns:?} against {ew:?}");
+        }
+    }
+}
+
+#[test]
 fn default_mixed_table_matches_the_old_symmetric_table() {
     const PBN: &str = "N:AK72.K65.K43.Q82 QJT.AQJ.AQJ.AKJT 986.T987.T98.976 543.432.7652.543";
     let deal: FullDeal = PBN.parse().expect("valid deal");
@@ -375,7 +427,7 @@ fn default_mixed_table_matches_the_old_symmetric_table() {
     let system = american(&defaults);
     let baseline = Table::of_systems(&system, &system, Seat::North, AbsoluteVulnerability::NONE)
         .bid_out(&deal);
-    let (ns, ew) = partnerships(WebSystemProfile::PonsAmerican);
+    let (ns, ew) = partnerships([WebSystemProfile::PonsAmerican; 2]);
     let mixed = Table::new(ns, ew, Seat::North, AbsoluteVulnerability::NONE).bid_out(&deal);
     assert_eq!(mixed, baseline);
 }
@@ -459,8 +511,8 @@ fn web_shell_keeps_system_identity_outside_pons_settings() {
     let registry = describe_options();
 
     assert!(
-        html.contains("<option value=\"pons-american\" selected>Pons American</option>"),
-        "Pons American remains the app default"
+        html.contains("id=\"system-profile-ns\"") && html.contains("id=\"system-profile-ew\""),
+        "the shell exposes independent partnership selectors"
     );
     assert!(
         html.contains("<option value=\"pen-club\">PEN-Club</option>"),
@@ -473,6 +525,11 @@ fn web_shell_keeps_system_identity_outside_pons_settings() {
     assert!(
         app.contains("const LEGACY_DRAFT_SYSTEM = 'bridge-tool-draft';"),
         "the old stored Draft value is migrated"
+    );
+    assert!(
+        app.contains("return { ns: legacy, ew: legacy };")
+            && app.contains("JSON.stringify(activeSystems)"),
+        "legacy scalar profiles migrate to persisted pair-scoped state"
     );
     assert!(
         !registry.contains("bridgetool-system-profile") && !registry.contains("pen-club"),

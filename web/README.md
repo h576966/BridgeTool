@@ -1,8 +1,9 @@
 # BridgeTool web (`pons-web` crate)
 
-The BridgeTool browser shell over [pons](..) has two explicit app profiles:
-the complete **Pons American** bidder and the playable **PEN-Club** draft.
-Both power practice, demos, editing, and book inspection. PEN-Club distinguishes
+The BridgeTool browser shell over [pons](..) has two explicit bidding-system
+profiles: the complete **Pons American** bidder and the playable **PEN-Club**
+draft. North–South and East–West select their profiles independently, and both
+power practice, demos, editing, and book inspection. PEN-Club distinguishes
 source-backed authored nodes from its PEN-safe natural fallback that completes
 uncovered auctions. Everything runs client-side as WebAssembly; there is no
 server.
@@ -61,10 +62,11 @@ Seven views:
   your calls you see the bot's top-3 picks with probabilities; after the
   auction, all four hands, the final contract, the oracle's verdict over 100
   opponent reshuffles, and the full double-dummy table.
-  The selected app profile supplies both partnerships' bidding systems.
-- **Demo** — deal a random board and watch `american()` bid all four seats,
-  then see the double-dummy table and the contract's actual-layout verdict.
-  It uses either Pons American or PEN-Club according to the app profile.
+  The human and each bot use the system selected for their N-S or E-W
+  partnership.
+- **Demo** — deal a random board and watch the selected N-S and E-W systems bid
+  all four seats, then see the double-dummy table and the contract's
+  actual-layout verdict.
 - **Opening Audit** — inspect one complete hand with the PEN-Club opening
   classifier used by the executable system. Eligibility, explicit selection,
   ambiguity, no-match, and diagnostic-only 6+–4 minor assignments stay
@@ -75,22 +77,23 @@ Seven views:
   every node's rules with weights and the constraints' own English
   descriptions. Search renders the first matching nodes instead of placing the
   entire book in the DOM. An NS/EW selector chooses which partnership's current
-  book is shown. PEN-Club exposes its authored constructive, competitive, and
-  defensive nodes; PEN-safe fallback calls are intentionally absent.
+  system and book are shown. PEN-Club exposes its authored constructive,
+  competitive, and defensive nodes; PEN-safe fallback calls are intentionally
+  absent.
 - **Edit** — a PBN field two-way-synced with a card palette; build a deal by
-  hand, then bid it out with the selected system or evaluate it.
+  hand, then bid it out with the selected N-S/E-W systems or evaluate it.
 - **Evaluate** — estimate tricks for two fixed N-S hands, price contracts, and
   optionally verify the estimate over double-dummy East-West reshuffles.
-- **Settings** — under Pons American, toggle bidding conventions grouped by area.
-  Under PEN-Club, the tab is a read-only implementation summary. The
-  Pons tab is generated from the Rust registry (`describe_options()` in
+- **Settings** — select N-S or E-W, then toggle that partnership's Pons American
+  conventions or see PEN-Club's read-only implementation summary. The Pons
+  controls are generated from the Rust registry (`describe_options()` in
   `src/lib.rs`), so a
   convention added there appears here automatically; mutually-exclusive families
   (e.g. defense to their 1NT) render as radio buttons backed by one engine enum.
-  NS and EW have separate profiles; each control edits the selected partnership
-  and changes apply when the next Practice/Demo board rebuilds both systems.
-  The two profiles are also disclosed to each other, so each side reads the
-  opponent's artificial calls from the opponent's actual book.
+  NS and EW have separate convention settings; each control edits the selected
+  partnership and changes apply when the next Practice/Demo board rebuilds both
+  systems. The two system profiles are disclosed to each other, so each side
+  reads the opponent's artificial calls from the opponent's actual book.
   See [Settings coverage](#settings-coverage) for what is not exposed yet.
 
 The app shell uses muted gray-blue CSS tokens in `style.css`. Suit colors remain
@@ -109,9 +112,11 @@ Only overrides are stored in `localStorage`, separately for NS and EW.  A
 pre-split global value is copied to both profiles on first load, preserving the
 old symmetric behavior.  Opponent disclosures such as Woolsey's Landy `2♣`
 and Multi `2♦` are derived from the other profile rather than user-editable.
-The app-global system identity is stored under its own
-`bridgetool-system-profile` key and is never written into `Agreements`. The
-legacy `bridge-tool-draft` value migrates to `pen-club` on first load.
+The pair-scoped system identities are stored as `{ns, ew}` under the
+`bridgetool-system-profile` key and are never written into `Agreements`. A
+pre-split scalar selection is copied to both pairs on first load, preserving the
+old symmetric behavior; the legacy `bridge-tool-draft` value migrates to
+`pen-club`.
 
 The registry is **curated by measurement**: it offers every convention that A/B's
 as a win or a wash, and hides options that measure *worse* — the engine keeps

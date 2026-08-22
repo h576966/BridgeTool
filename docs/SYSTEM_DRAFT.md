@@ -83,8 +83,9 @@ The current authored book contains:
   specific-king continuations, useful-void responses, Exclusion RKCB, and
   ROPI/DOPI/DEPO at their authored trump-fit anchors;
 - natural direct and balancing overcalls, takeout and responsive Doubles,
-  advances, Michaels, Unusual 2NT, defenses through four-level preempts, and
-  Landy-plus-natural defense to a disclosed natural 1NT.
+  advances, Michaels, Unusual 2NT, defenses through four-level preempts,
+  Landy-plus-natural defense to a disclosed natural 1NT, and the simple
+  two-suiter-plus-natural defense to an artificial strong 1♣.
 
 Every artificial opening, relay, preference, transfer, and forced completion
 is alerted and backed by a machine-readable constraint. Inference tests verify
@@ -101,11 +102,18 @@ only when its two longest suits total at most nine cards. The split is used by
 
 ## PEN-safe natural fallback
 
-Unauthored constructive, competitive, and defensive positions use a PEN-only
-wrapper around the natural candidate ladder. It consumes the authored
+An unmatched PEN opening always Passes; the fallback cannot replace PEN's
+artificial opening meanings with natural 1♣, 1♦, or 1♠ calls. Other unauthored
+constructive, competitive, and defensive positions use a PEN-only wrapper
+around the natural candidate ladder. It consumes the authored
 projections, refuses Pass below game in a known game force, and cannot originate
-Double, Redouble, 4NT, or a bid above game without the corresponding authored
-double policy or an explicit quantitative or slam trigger. The learned
+Double or Redouble without the corresponding authored policy. In an
+uncontested game force it can originate a general slam search at a known
+combined 29 HCP: show an unshown four-card side suit, otherwise rebid a shown
+six-card suit, establish an eight-card fit with the minimum required support,
+then use economical mixed controls and RKCB. Outside that agreement it still
+cannot originate 4NT or a bid above game without an explicit quantitative or
+slam trigger. The learned
 American/Dutch floor is not used: its neural regime and convention card do not
 describe PEN-Club's artificial 1♣, 1♦, and 1♠ openings.
 
@@ -120,7 +128,8 @@ calls are intentionally not rendered as if they were authored PEN doctrine.
 - Transfer Rubensohl over 1NT interference and interference over later asks;
 - exact penalty-conversion gates, fit-based distributional upgrades, and
   vulnerability adjustments;
-- defenses to artificial or multi-meaning opponent openings;
+- defenses to artificial or multi-meaning opponent openings other than a
+  strong 1♣;
 - higher preempts and the running-major 3NT opening, because the source names
   them but does not give an objective strength/suit-quality gate.
 

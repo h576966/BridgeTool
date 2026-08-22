@@ -573,7 +573,7 @@ fn verdict_lines(
 pub struct WebTable {
     rng: StdRng,
     board: Option<Board>,
-    profile: WebSystemProfile,
+    profiles: [WebSystemProfile; 2],
 }
 
 #[wasm_bindgen]
@@ -585,20 +585,23 @@ impl WebTable {
         Self {
             rng: StdRng::seed_from_u64(seed.parse().unwrap_or(0)),
             board: None,
-            profile: WebSystemProfile::default(),
+            profiles: [WebSystemProfile::default(); 2],
         }
     }
 
-    /// Select the real bidding engine used by subsequent deals.
+    /// Select one partnership's real bidding engine for subsequent deals.
     ///
-    /// A valid selection clears any board and its cached analysis. Unknown
-    /// profile strings are rejected without changing state.
-    pub fn set_system_profile(&mut self, profile: &str) -> bool {
+    /// A changed selection clears any board and its cached analysis. Unknown
+    /// partnership or profile strings are rejected without changing state.
+    pub fn set_system_profile(&mut self, pair: &str, profile: &str) -> bool {
+        let Some(index) = pair_index(pair) else {
+            return false;
+        };
         let Some(profile) = WebSystemProfile::parse(profile) else {
             return false;
         };
-        if self.profile != profile {
-            self.profile = profile;
+        if self.profiles[index] != profile {
+            self.profiles[index] = profile;
             self.board = None;
         }
         true
@@ -819,7 +822,7 @@ impl WebTable {
     ) -> String {
         let dealer = dealer.parse().unwrap_or(Seat::North);
         let vul = vul.parse().unwrap_or(AbsoluteVulnerability::NONE);
-        let (ns, ew) = partnerships(self.profile);
+        let (ns, ew) = partnerships(self.profiles);
         let mut board = Board {
             table: Table::new(ns, ew, dealer, vul),
             deal,
@@ -875,7 +878,9 @@ pub fn book(profile: &str, pair: &str) -> String {
         return "[]".to_string();
     };
     let system = match profile {
-        WebSystemProfile::PonsAmerican => american_book(&declared_agreements()[index]),
+        WebSystemProfile::PonsAmerican => {
+            american_book(&declared_agreements([WebSystemProfile::PonsAmerican; 2])[index])
+        }
         WebSystemProfile::PenClub => pen_club_book_default(),
     };
     let books: [(&str, &pons::Trie); 3] = [
@@ -1036,8 +1041,15 @@ fn amend(pair: &str, edit: impl FnOnce(&mut Agreements)) {
 }
 
 /// What `ours` must be told about `theirs` before its book is built.
-fn disclosures(theirs: &Agreements) -> TheirDisclosures {
+fn disclosures(profile: WebSystemProfile, theirs: &Agreements) -> TheirDisclosures {
     use american::NotrumpDefense;
+
+    if profile == WebSystemProfile::PenClub {
+        return TheirDisclosures {
+            two_clubs_landy: true,
+            two_diamonds_multi: false,
+        };
+    }
 
     let defense = theirs.decision.reading.notrump_defense;
     TheirDisclosures {
@@ -1049,27 +1061,33 @@ fn disclosures(theirs: &Agreements) -> TheirDisclosures {
 }
 
 /// Both profiles with facts about the opposing profile filled in.
-fn declared_agreements() -> [Agreements; 2] {
+fn declared_agreements(profiles: [WebSystemProfile; 2]) -> [Agreements; 2] {
     let [mut ns, mut ew] = agreements();
-    ns.decision.their = disclosures(&ew);
-    ew.decision.their = disclosures(&ns);
+    ns.decision.their = disclosures(profiles[1], &ew);
+    ew.decision.their = disclosures(profiles[0], &ns);
     [ns, ew]
 }
 
 /// Bind a genuinely mixed table: each side sees the other's card and books.
-fn partnerships(profile: WebSystemProfile) -> (Partnership, Partnership) {
-    let [ns_agreements, ew_agreements] = declared_agreements();
-    let (ns, ew) = match profile {
-        WebSystemProfile::PonsAmerican => {
-            let ns_card = ConventionCard::capture(&ns_agreements, false);
-            let ew_card = ConventionCard::capture(&ew_agreements, false);
-            (
-                american_with_card(&ns_agreements, &ew_card).bind(),
-                american_with_card(&ew_agreements, &ns_card).bind(),
-            )
+fn partnerships(profiles: [WebSystemProfile; 2]) -> (Partnership, Partnership) {
+    let [ns_agreements, ew_agreements] = declared_agreements(profiles);
+    let build = |profile: WebSystemProfile,
+                 ours: &Agreements,
+                 theirs_profile: WebSystemProfile,
+                 theirs: &Agreements| {
+        match profile {
+            WebSystemProfile::PonsAmerican if theirs_profile == WebSystemProfile::PonsAmerican => {
+                american_with_card(ours, &ConventionCard::capture(theirs, false)).bind()
+            }
+            // PEN has no trained convention-card encoding for the learned floor.
+            // Keep that input on Pons's supported self-card regime; the actual PEN
+            // books are still attached below for alert and inference reading.
+            WebSystemProfile::PonsAmerican => american(ours).bind(),
+            WebSystemProfile::PenClub => pen_club_default().bind(),
         }
-        WebSystemProfile::PenClub => (pen_club_default().bind(), pen_club_default().bind()),
     };
+    let ns = build(profiles[0], &ns_agreements, profiles[1], &ew_agreements);
+    let ew = build(profiles[1], &ew_agreements, profiles[0], &ns_agreements);
     (ns.clone().with_opponents(&ew), ew.with_opponents(&ns))
 }
 

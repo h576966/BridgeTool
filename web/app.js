@@ -16,11 +16,29 @@ const PONS_SYSTEM = 'pons-american';
 const PEN_SYSTEM = 'pen-club';
 const LEGACY_DRAFT_SYSTEM = 'bridge-tool-draft';
 
-const savedSystem = localStorage.getItem(SYSTEM_STORAGE_KEY);
-let activeSystem = savedSystem === PEN_SYSTEM || savedSystem === LEGACY_DRAFT_SYSTEM
-  ? PEN_SYSTEM
-  : PONS_SYSTEM;
-const isPenSystem = () => activeSystem === PEN_SYSTEM;
+function parseSystem(value) {
+  if (value === PONS_SYSTEM) return PONS_SYSTEM;
+  if (value === PEN_SYSTEM || value === LEGACY_DRAFT_SYSTEM) return PEN_SYSTEM;
+  return null;
+}
+
+function loadSystemProfiles(raw) {
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const ns = parseSystem(parsed.ns);
+        const ew = parseSystem(parsed.ew);
+        if (ns && ew) return { ns, ew };
+      }
+    } catch { /* legacy scalar below */ }
+  }
+  const legacy = parseSystem(raw) || PONS_SYSTEM;
+  return { ns: legacy, ew: legacy };
+}
+
+const activeSystems = loadSystemProfiles(localStorage.getItem(SYSTEM_STORAGE_KEY));
+const isPenSystem = (pair) => activeSystems[pair] === PEN_SYSTEM;
 
 const ORACLE_TOTAL = 100; // reshuffles per board
 const ORACLE_CHUNK = 2; // per JS task, so the page keeps painting between them
@@ -37,17 +55,17 @@ let analysisGen = -1; // last boardGen whose DD + oracle were kicked off
 const id = (x) => document.getElementById(x);
 
 async function main() {
-  renderSystemProfile(); // prevent a saved PEN profile from flashing Pons UI during wasm startup
+  renderSystemProfiles();
   await init();
   game = new WebTable(String(Math.floor(Math.random() * 2 ** 53)));
-  game.set_system_profile(activeSystem);
+  for (const pair of PAIRS) game.set_system_profile(pair, activeSystems[pair]);
   OPTIONS = JSON.parse(describe_options()); // the Settings registry, from wasm
   // Replay saved overrides: booleans are toggles, strings are radio-choice values.
   for (const pair of PAIRS) {
     for (const [key, value] of Object.entries(stored[pair])) applyOption(pair, key, value);
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stored)); // persist legacy migration
-  initSystemProfile();
+  initSystemProfiles();
   buildBiddingBox();
   window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
   id('p-deal').onclick = dealPractice;
@@ -84,19 +102,25 @@ function showTab(tab) {
 //
 // System identity stays separate from the partnership-scoped Pons Agreements
 // registry below, but it is sent into wasm and selects the actual bidder.
-function initSystemProfile() {
-  localStorage.setItem(SYSTEM_STORAGE_KEY, activeSystem);
-  id('system-profile').onchange = (ev) => setSystemProfile(ev.target.value);
-  renderSystemProfile();
+function saveSystemProfiles() {
+  localStorage.setItem(SYSTEM_STORAGE_KEY, JSON.stringify(activeSystems));
 }
 
-function setSystemProfile(value) {
-  const next = value === PEN_SYSTEM ? PEN_SYSTEM : PONS_SYSTEM;
-  if (next === activeSystem) return;
+function initSystemProfiles() {
+  saveSystemProfiles();
+  for (const pair of PAIRS) {
+    id(`system-profile-${pair}`).onchange = (ev) => setSystemProfile(pair, ev.target.value);
+  }
+  renderSystemProfiles();
+}
 
-  activeSystem = next;
-  game.set_system_profile(activeSystem);
-  localStorage.setItem(SYSTEM_STORAGE_KEY, activeSystem);
+function setSystemProfile(pair, value) {
+  const next = value === PEN_SYSTEM ? PEN_SYSTEM : PONS_SYSTEM;
+  if (next === activeSystems[pair]) return;
+
+  activeSystems[pair] = next;
+  game.set_system_profile(pair, next);
+  saveSystemProfiles();
   clearInterval(demoTimer);
   demoTimer = 0;
   boardGen++; // invalidate any in-flight Pons analysis when leaving that profile
@@ -104,17 +128,20 @@ function setSystemProfile(value) {
   current = null;
   bookNodes = null;
   clearBoardViews();
-  renderSystemProfile();
+  renderSystemProfiles();
+  if (settingsBuilt) renderSettingsProfile();
   paintEdit();
   showTab(location.hash.slice(1));
 }
 
-function renderSystemProfile() {
-  const pen = isPenSystem();
-  document.body.dataset.system = pen ? 'pen' : 'pons';
-  id('system-profile').value = activeSystem;
-  id('system-profile-state').textContent = pen ? 'Full bidding · draft' : 'Full bidding';
-  id('system-profile-state').classList.toggle('provisional', pen);
+function renderSystemProfiles() {
+  for (const pair of ['ns', 'ew']) {
+    const pen = isPenSystem(pair);
+    id(`system-profile-${pair}`).value = activeSystems[pair];
+    const state = id(`system-profile-state-${pair}`);
+    state.textContent = pen ? 'Draft' : 'Full';
+    state.classList.toggle('provisional', pen);
+  }
 }
 
 function clearBoardViews() {
@@ -495,7 +522,7 @@ function auditCallList(calls) {
 // --- book browser --------------------------------------------------------------
 
 function loadBook() {
-  const nodes = JSON.parse(book(activeSystem, bookPair));
+  const nodes = JSON.parse(book(activeSystems[bookPair], bookPair));
   bookNodes = nodes.map((node) => {
     const haystack =
       (node.auction + ' ' + node.rules.map((r) => `${r.call} ${r.text}`).join(' ') +
@@ -800,6 +827,7 @@ function renderSettings() {
   id('s-pair').onchange = (ev) => {
     settingsPair = ev.target.value;
     renderInputs();
+    renderSettingsProfile();
   };
 
   id('s-reset').onclick = () => {
@@ -810,6 +838,14 @@ function renderSettings() {
     bookNodes = null;
     renderInputs(); // repaint checked/selected from the (now empty) overrides
   };
+
+  renderSettingsProfile();
+}
+
+function renderSettingsProfile() {
+  const pen = isPenSystem(settingsPair);
+  id('s-pen-summary').classList.toggle('hidden', !pen);
+  id('s-pons-settings').classList.toggle('hidden', pen);
 }
 
 // Reflect the current values onto the existing inputs without rebuilding listeners.

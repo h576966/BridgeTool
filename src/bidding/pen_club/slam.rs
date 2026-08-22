@@ -17,7 +17,7 @@ const EXCLUSION: Alert = Alert("pen:exclusion-rkcb");
 const ROPI: Alert = Alert("pen:ropi");
 const DOPI: Alert = Alert("pen:dopi");
 const DEPO: Alert = Alert("pen:depo");
-const CONTROL: Alert = Alert("pen:mixed-control");
+pub(super) const CONTROL: Alert = Alert("pen:mixed-control");
 
 const fn bid(level: u8, strain: Strain) -> Bid {
     Bid::new(level, strain)

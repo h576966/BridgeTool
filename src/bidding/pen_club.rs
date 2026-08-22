@@ -2,10 +2,12 @@
 //!
 //! The authored book contains the opening structure and the continuations that
 //! can be stated from the local PEN-Klövern source without changing their
-//! meaning. Every other position falls through to a PEN-only safe wrapper around
-//! the natural [`instinct`][mod@super::instinct] ladder. The wrapper preserves
-//! known game forces and cannot invent a slam trigger. The neural American/Dutch
-//! floor is deliberately not used: its convention-card regime does not describe
+//! meaning. An unmatched opening hand Passes; other unspecified positions fall
+//! through to a PEN-only safe wrapper around the natural
+//! [`instinct`][mod@super::instinct] ladder. The wrapper preserves known game
+//! forces and adds the documented uncontested, game-forcing descriptive slam
+//! search before reusing PEN controls and RKCB. The neural American/Dutch floor
+//! is deliberately not used: its convention-card regime does not describe
 //! these artificial openings.
 
 mod competition;

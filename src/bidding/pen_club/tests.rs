@@ -3,9 +3,10 @@ use crate::bidding::agreements::Agreements;
 use crate::bidding::american::american_book;
 use crate::bidding::array::Logits;
 use crate::bidding::bridge_tool::{Opening, OpeningSelection, select_opening};
+use crate::bidding::context::Context;
 use crate::bidding::inference::{Range, Relative};
 use crate::bidding::trie::Trie;
-use crate::bidding::{Bidder, Partnership, Table};
+use crate::bidding::{Alert, Bidder, Partnership, Table};
 use contract_bridge::auction::{Auction, Call, RelativeVulnerability};
 use contract_bridge::deck::fill_deals;
 use contract_bridge::{AbsoluteVulnerability, Bid, Builder, FullDeal, Hand, Seat, Strain, Suit};
@@ -175,6 +176,28 @@ fn weak_major_and_two_notrump_boundaries_match_the_audit() {
 }
 
 #[test]
+fn unmatched_pen_opening_hands_pass_in_every_seat() {
+    let system = partnership();
+    for text in [
+        "QJ6.65.K6.JT9832", // the reported seven-HCP false 1♣
+        "QJ6.65.JT9832.K6", // the same leak through a natural 1♦ fallback
+        "QJ983.65.K6.JT83", // the same leak through a natural 1♠ fallback
+    ] {
+        assert_eq!(select_opening(hand(text)), OpeningSelection::NoMatch);
+        for leading_passes in 0..=3 {
+            let auction = vec![Call::Pass; leading_passes];
+            assert_eq!(best(&system, &auction, text), Call::Pass, "{text}");
+        }
+    }
+
+    assert_eq!(
+        best(&system, &[Call::Pass, Call::Pass], "K9.AKQ42.AJ73.A4",),
+        call(1, Strain::Clubs),
+        "the reported South hand must make PEN's strong artificial opening",
+    );
+}
+
+#[test]
 fn artificial_openings_project_their_meanings() {
     let system = partnership();
 
@@ -273,6 +296,98 @@ fn declared_opponents_read_pen_openings_and_transfers() {
     );
     assert!(transfer.get(Relative::Rho).length(Suit::Hearts).min >= 5);
     assert_eq!(transfer.get(Relative::Rho).length(Suit::Diamonds).min, 0);
+}
+
+#[test]
+fn strong_club_defense_is_simple_and_readable() {
+    let system = partnership();
+    let one_club = call(1, Strain::Clubs);
+    let pass = Call::Pass;
+
+    assert_eq!(
+        best(&system, &[one_club], "K9.AKQ42.AJ73.A4"),
+        call(1, Strain::Hearts),
+        "the reported 21-count must act naturally over the artificial club",
+    );
+    assert_eq!(
+        best(&system, &[one_club], "32.2.AKQ87.AQJ87"),
+        Call::Double,
+        "Double shows both minors",
+    );
+    assert_eq!(
+        best(&system, &[one_club], "KJ987.QJ987.A2.2"),
+        call(1, Strain::Notrump),
+        "1NT shows both majors",
+    );
+    assert_eq!(
+        best(&system, &[one_club], "32.32.32.AKQJ876"),
+        call(2, Strain::Clubs),
+        "2C is the natural club single-suiter",
+    );
+
+    assert_eq!(
+        best(&system, &[one_club, Call::Double, pass], "32.32.KJ87.QJ987",),
+        call(2, Strain::Clubs),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[one_club, call(1, Strain::Notrump), pass],
+            "KJ87.QJ2.5432.32",
+        ),
+        call(2, Strain::Spades),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[
+                one_club,
+                call(1, Strain::Notrump),
+                pass,
+                call(2, Strain::Spades),
+                pass,
+            ],
+            "KJ987.QJ987.A2.2",
+        ),
+        pass,
+    );
+
+    let book = pen_club_book_default();
+    let rules = book
+        .defensive
+        .get(&[one_club])
+        .and_then(|classifier| classifier.as_rules())
+        .expect("strong-club defensive rules");
+    let auction = [one_club];
+    let context = Context::new(RelativeVulnerability::NONE, &auction);
+    let projection = |call, alert| {
+        rules
+            .rules()
+            .iter()
+            .find(|rule| rule.call() == call && rule.alert() == Some(alert))
+            .expect("alerted strong-club rule")
+            .project(&context)
+    };
+    let minors = projection(Call::Double, Alert("pen:strong-club-defense-minors"));
+    assert!(minors.length(Suit::Clubs).min >= 5);
+    assert!(minors.length(Suit::Diamonds).min >= 5);
+    let majors = projection(
+        call(1, Strain::Notrump),
+        Alert("pen:strong-club-defense-majors"),
+    );
+    assert!(majors.length(Suit::Hearts).min >= 5);
+    assert!(majors.length(Suit::Spades).min >= 5);
+}
+
+#[test]
+fn strong_hands_still_double_disclosed_natural_openings() {
+    let their_american = american_book(&Agreements::default()).bind();
+    let ours = partnership().with_opponents(&their_american);
+    assert_eq!(
+        best(&ours, &[call(1, Strain::Clubs)], "AQ3.KJ2.AJ43.Q32",),
+        Call::Double,
+        "17+ doubles even without classic takeout shape",
+    );
 }
 
 #[test]
@@ -835,6 +950,154 @@ fn pen_fallback_uses_combined_hcp_for_a_no_fit_invitation() {
         )
         .expect("the fallback covers an invitation");
     assert_eq!(maximum.0[Call::Pass], f32::NEG_INFINITY);
+}
+
+#[test]
+fn strong_club_minor_positive_uses_general_slam_search() {
+    let system = partnership();
+    let pass = Call::Pass;
+    let north = "AK52.A763.A73.J3";
+    let south = "64.K.KJ54.AQ7542";
+    let start = [
+        call(1, Strain::Clubs),
+        pass,
+        call(2, Strain::Clubs),
+        pass,
+        call(2, Strain::Notrump),
+        pass,
+    ];
+
+    assert_eq!(
+        best(&system, &start, south),
+        call(3, Strain::Diamonds),
+        "the four-card side suit keeps the game force below 3NT",
+    );
+
+    let after_three_diamonds = [start.as_slice(), &[call(3, Strain::Diamonds), pass]].concat();
+    assert_eq!(
+        best(&system, &after_three_diamonds, north),
+        call(4, Strain::Clubs),
+        "two clubs opposite a shown six establishes the eight-card fit",
+    );
+
+    let after_fit = [
+        after_three_diamonds.as_slice(),
+        &[call(4, Strain::Clubs), pass],
+    ]
+    .concat();
+    let fit = system.infer(RelativeVulnerability::NONE, &after_fit);
+    assert!(
+        fit.partner().length(Suit::Clubs).min >= 2,
+        "the fit-setting raise promises the two cards needed opposite six",
+    );
+    assert_eq!(
+        best(&system, &after_fit, south),
+        call(4, Strain::Diamonds),
+        "with spades uncontrolled responder shows the cheapest side control",
+    );
+    let (_, control_rule) = system
+        .explain_call(
+            hand(south),
+            RelativeVulnerability::NONE,
+            &after_fit,
+            call(4, Strain::Diamonds),
+        )
+        .expect("the general control fallback explains its call");
+    assert_eq!(
+        control_rule.and_then(|rule| rule.alert),
+        Some("pen:mixed-control"),
+    );
+
+    let after_control = [after_fit.as_slice(), &[call(4, Strain::Diamonds), pass]].concat();
+    let control = system.infer(RelativeVulnerability::NONE, &after_control);
+    assert_eq!(
+        control.control_bid(),
+        Some((10, Suit::Clubs)),
+        "the alerted diamond call is machine-readable as a club control sequence",
+    );
+    assert_eq!(
+        best(&system, &after_control, north),
+        call(4, Strain::Notrump),
+        "opener holds the other side controls and can now ask for keycards",
+    );
+    let (_, keycard_rule) = system
+        .explain_call(
+            hand(north),
+            RelativeVulnerability::NONE,
+            &after_control,
+            call(4, Strain::Notrump),
+        )
+        .expect("the general RKCB fallback explains its call");
+    assert_eq!(
+        keycard_rule.and_then(|rule| rule.alert),
+        Some("pen:rkcb-1430"),
+    );
+
+    let after_keycard = [after_control.as_slice(), &[call(4, Strain::Notrump), pass]].concat();
+    assert_eq!(
+        best(&system, &after_keycard, south),
+        call(5, Strain::Clubs),
+        "one keycard answers RKCB 1430",
+    );
+}
+
+#[test]
+fn general_slam_search_keeps_the_measured_29_point_floor() {
+    let system = partnership();
+    let pass = Call::Pass;
+    let start = [
+        call(1, Strain::Clubs),
+        pass,
+        call(2, Strain::Clubs),
+        pass,
+        call(2, Strain::Notrump),
+        pass,
+    ];
+
+    assert_eq!(
+        best(&system, &start, "64.K.QJ54.AQ7542"),
+        call(3, Strain::Notrump),
+        "a twelve-count opposite the 16-point floor must not start the 29-point search",
+    );
+}
+
+#[test]
+fn delayed_below_game_raises_promise_the_cards_needed_for_eight() {
+    let system = partnership();
+    let pass = Call::Pass;
+    let four_four = system.infer(
+        RelativeVulnerability::NONE,
+        &[
+            call(1, Strain::Clubs),
+            pass,
+            call(1, Strain::Hearts),
+            pass,
+            call(2, Strain::Clubs),
+            pass,
+            call(2, Strain::Diamonds),
+            pass,
+            call(2, Strain::Hearts),
+            pass,
+        ],
+    );
+    assert!(four_four.partner().length(Suit::Hearts).min >= 4);
+
+    let five_three = system.infer(
+        RelativeVulnerability::NONE,
+        &[
+            call(1, Strain::Hearts),
+            pass,
+            call(1, Strain::Notrump),
+            pass,
+            call(2, Strain::Clubs),
+            pass,
+            call(2, Strain::Diamonds),
+            pass,
+            call(2, Strain::Spades),
+            pass,
+        ],
+    );
+    assert!(five_three.partner().length(Suit::Spades).min >= 3);
 }
 
 #[test]

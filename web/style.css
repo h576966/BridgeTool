@@ -84,6 +84,7 @@ body {
 .brand { display: flex; align-items: baseline; gap: 0.65rem; flex: 0 0 auto; }
 h1 { font-size: 1.3rem; letter-spacing: -0.02em; margin: 0; }
 .brand span { font-size: 0.78rem; opacity: 0.7; }
+.system-pickers { display: flex; flex-wrap: wrap; gap: 0.55rem 0.9rem; }
 .system-picker { display: flex; flex-direction: column; gap: 0.2rem; flex: 0 0 auto; }
 .system-picker > label {
   font-size: 0.68rem;
@@ -145,10 +146,6 @@ nav a.active { background: var(--primary); border-color: #7894ae; color: #fff; }
 main { max-width: 72rem; margin: 0 auto; padding: 1.25rem clamp(0.75rem, 3vw, 1.5rem) 2rem; }
 section { display: flex; flex-direction: column; gap: 1.25rem; align-items: stretch; }
 .view-stack { display: flex; flex-direction: column; gap: 1.25rem; }
-.pen-only { display: none !important; }
-body[data-system="pen"] .pons-only { display: none !important; }
-body[data-system="pen"] .pen-only { display: block !important; }
-body[data-system="pen"] .pen-only.view-stack { display: flex !important; }
 .view-heading { max-width: 48rem; }
 .view-heading h2 { margin: 0.1rem 0 0.35rem; font-size: clamp(1.55rem, 3vw, 2rem); }
 .view-heading p:last-child { margin: 0; opacity: 0.82; }
@@ -540,6 +537,7 @@ label.opt input { width: 1rem; height: 1rem; cursor: pointer; }
 @media (max-width: 40rem) {
   .app-header { align-items: flex-start; }
   .brand { width: 100%; }
+  .system-pickers { width: 100%; }
   .system-picker { width: 100%; }
   .system-picker-row { width: 100%; }
   .system-picker select { flex: 1 1 auto; min-width: 0; }

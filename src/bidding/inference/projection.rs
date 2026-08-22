@@ -281,6 +281,11 @@ pub(super) struct CallMasks {
     /// artificial one must not, or a transfer's face suit becomes a phantom
     /// holding.
     pub(super) artificial: u64,
+    /// Calls explicitly authored as mixed control bids. Their projection has
+    /// no card-shape axis for "ace, king, or shortness", so the natural walk
+    /// carries this semantic witness separately, just as it does for the
+    /// deterministic unalerted control-bid reader.
+    pub(super) control_bid: u64,
     /// Per-suit call masks whose projection promises at least three through
     /// six cards: `length_floor[i]` holds the calls promising `i + 3`-plus.
     /// The walk consumes these chronologically to retain fit, rebid and cue
@@ -315,6 +320,9 @@ impl CallMasks {
         if effect.artificial {
             self.artificial |= bit;
         }
+        if effect.control_bid {
+            self.control_bid |= bit;
+        }
         if effect.walk_shape {
             self.walk_shape |= bit;
         }
@@ -328,6 +336,7 @@ impl CallMasks {
         self.authored |= other.authored;
         self.substituted |= other.substituted;
         self.artificial |= other.artificial;
+        self.control_bid |= other.control_bid;
         self.walk_shape |= other.walk_shape;
         for (mine, theirs) in self.length_floor.iter_mut().zip(other.length_floor) {
             for (mine, theirs) in mine.iter_mut().zip(theirs) {
@@ -381,6 +390,7 @@ struct AuthoredEffect<'a> {
     agreement: Option<crate::bidding::rules::ProjectedUnion<'a>>,
     authored: bool,
     artificial: bool,
+    control_bid: bool,
     walk_shape: bool,
     substitutes_natural: bool,
     suppresses_natural: bool,
@@ -485,6 +495,23 @@ fn authored_effect<'a>(
                 .iter()
                 .any(|rule| rule.call() == made && rule.alert().is_some() && rule.face_live(ctx))
         };
+    let control_bid = !is_pass
+        && if let Some(compiled) = compiled {
+            compiled.alerted_rule_indices(made).iter().any(|&index| {
+                let rule = &rules.rules()[index as usize];
+                rule.alert()
+                    .is_some_and(|alert| alert.0 == "pen:mixed-control")
+                    && compiled.face_live_memoized(rules, index, ctx, &mut face_memo)
+            })
+        } else {
+            rules.rules().iter().any(|rule| {
+                rule.call() == made
+                    && rule
+                        .alert()
+                        .is_some_and(|alert| alert.0 == "pen:mixed-control")
+                    && rule.face_live(ctx)
+            })
+        };
     let decode = if is_pass {
         decode_pass
     } else {
@@ -565,6 +592,7 @@ fn authored_effect<'a>(
         agreement,
         authored: !is_pass,
         artificial: alerted,
+        control_bid,
         walk_shape,
         substitutes_natural,
         suppresses_natural: alerted || substitutes_natural,
@@ -1123,6 +1151,7 @@ impl AuthoringStepCache {
                         agreement: None,
                         authored: false,
                         artificial: false,
+                        control_bid: false,
                         walk_shape: false,
                         substitutes_natural: false,
                         suppresses_natural: false,

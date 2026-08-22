@@ -2,10 +2,10 @@
 
 use crate::bidding::agreements::Agreements;
 use crate::bidding::constraint::{
-    Cons, Constraint, at_least_as_long, balanced, described, hcp, len, longer_suit, min_level_is,
-    partner_shown_len, short_in_their_suits, stopper_in, top_honors, unbid_support,
+    Cons, Constraint, and, at_least_as_long, balanced, described, hcp, len, longer_suit,
+    min_level_is, partner_shown_len, short_in_their_suits, stopper_in, top_honors, unbid_support,
 };
-use crate::bidding::inference::{Relative, relative_of};
+use crate::bidding::inference::{Envelope, Relative, relative_of};
 use crate::bidding::rows::{Entry, Package, Pattern, rows_of};
 use crate::bidding::{Alert, Rules};
 use contract_bridge::auction::Call;
@@ -18,30 +18,125 @@ const UNUSUAL: Alert = Alert("pen:unusual-two-notrump");
 const ADVANCE_CUE: Alert = Alert("pen:overcall-advance-cue");
 const RESPONSIVE: Alert = Alert("pen:responsive-double");
 const LANDY: Alert = Alert("pen:landy");
+const STRONG_CLUB_MINORS: Alert = Alert("pen:strong-club-defense-minors");
+const STRONG_CLUB_MAJORS: Alert = Alert("pen:strong-club-defense-majors");
 
 const fn bid(level: u8, strain: Strain) -> Bid {
     Bid::new(level, strain)
 }
 
+/// Read the opening from its own auction prefix. Later calls may have other
+/// plausible meanings, but they must not change what the opening disclosed.
+fn opponent_opening_satisfies(
+    context: &crate::bidding::context::Context<'_>,
+    accepts: impl FnOnce(&Envelope) -> bool,
+) -> bool {
+    let Some(index) = context
+        .auction()
+        .iter()
+        .position(|call| *call != Call::Pass)
+    else {
+        return false;
+    };
+    let relative = relative_of(context.auction().len(), index);
+    if !matches!(relative, Relative::Lho | Relative::Rho) {
+        return false;
+    }
+
+    if let Some(system) = context.own_system() {
+        let prefix = &context.auction()[..=index];
+        let turns_removed = context.auction().len() - prefix.len();
+        let vul = if turns_removed.is_multiple_of(2) {
+            context.vul()
+        } else {
+            crate::bidding::context::flipped(context.vul())
+        };
+        return accepts(system.infer(vul, prefix).rho());
+    }
+
+    accepts(context.inferences().get(relative))
+}
+
 /// Require the opponent's declared system to show cards in the suit it named.
 /// This keeps PEN's natural defenses off artificial strong-club/relay openings.
+fn disclosed_natural_suit_opening(
+    suit: Suit,
+    context: &crate::bidding::context::Context<'_>,
+) -> bool {
+    opponent_opening_satisfies(context, |shown| shown.length(suit).min >= 3)
+}
+
 fn natural_suit_opening(suit: Suit) -> Cons<impl Constraint + Clone> {
     described(
         format!("the opponents disclose a natural {suit} opening"),
         move |_: Hand, context: &crate::bidding::context::Context<'_>| {
-            let Some(index) = context
-                .auction()
-                .iter()
-                .position(|call| *call != Call::Pass)
-            else {
-                return false;
-            };
-            let relative = relative_of(context.auction().len(), index);
-            let inferences = context.inferences();
-            let shown = inferences.get(relative);
-            matches!(relative, Relative::Lho | Relative::Rho) && shown.length(suit).min >= 3
+            disclosed_natural_suit_opening(suit, context)
         },
     )
+}
+
+/// Require a disclosed artificial strong-club opening.
+fn disclosed_artificial_strong_club(context: &crate::bidding::context::Context<'_>) -> bool {
+    opponent_opening_satisfies(context, |shown| {
+        shown.strength.hcp.min >= 16 && shown.length(Suit::Clubs).min < 3
+    })
+}
+
+fn artificial_strong_club() -> Cons<impl Constraint + Clone> {
+    described(
+        "the opponents disclose an artificial strong-club opening",
+        |_: Hand, context: &crate::bidding::context::Context<'_>| {
+            disclosed_artificial_strong_club(context)
+        },
+    )
+}
+
+fn takeout_or_strong(minimum: u8) -> Cons<impl Constraint + Clone> {
+    (hcp(minimum..=16) & !balanced() & short_in_their_suits() & unbid_support(1)) | hcp(17..)
+}
+
+/// Simple, Mathe-style interference over an artificial strong 1♣, with the
+/// two two-suited calls swapped so the requested 1NT shows both majors.
+fn strong_club_defense() -> Rules {
+    let artificial = artificial_strong_club();
+    let weak_or_strong = hcp(..=11) | hcp(16..);
+    let mut rules = Rules::new()
+        .rule(
+            Call::Double,
+            520,
+            artificial.clone() & and([Suit::Clubs, Suit::Diamonds], 5..) & weak_or_strong.clone(),
+        )
+        .alert(STRONG_CLUB_MINORS)
+        .rule(
+            bid(1, Strain::Notrump),
+            520,
+            artificial.clone() & and([Suit::Hearts, Suit::Spades], 5..) & weak_or_strong,
+        )
+        .alert(STRONG_CLUB_MAJORS)
+        .rule(
+            bid(2, Strain::Clubs),
+            470,
+            artificial.clone() & len(Suit::Clubs, 6..) & hcp(5..),
+        );
+
+    for suit in [Suit::Diamonds, Suit::Hearts, Suit::Spades] {
+        let strain = Strain::from(suit);
+        rules = rules
+            .rule(
+                bid(2, strain),
+                430,
+                artificial.clone() & len(suit, 6..) & hcp(5..=9) & min_level_is(1, strain),
+            )
+            .rule(
+                bid(1, strain),
+                400 + i16::from(strain.is_major()) * 10,
+                artificial.clone() & len(suit, 5..) & hcp(8..) & min_level_is(1, strain),
+            );
+    }
+
+    // This is a complete policy for the immediate decision. Do not let the
+    // generic natural floor reinterpret an artificial 1♣ when no action fits.
+    rules.rule(Call::Pass, 0, artificial)
 }
 
 fn natural_notrump_opening() -> Cons<impl Constraint + Clone> {
@@ -70,13 +165,7 @@ fn natural_notrump_opening() -> Cons<impl Constraint + Clone> {
 fn direct_suit_defense(opened: Suit) -> Rules {
     let natural = natural_suit_opening(opened);
     let mut rules = Rules::new()
-        .rule(
-            Call::Double,
-            500,
-            natural.clone()
-                & ((hcp(12..=17) & !balanced() & short_in_their_suits() & unbid_support(1))
-                    | hcp(18..)),
-        )
+        .rule(Call::Double, 500, natural.clone() & takeout_or_strong(12))
         .alert(TAKEOUT)
         .rule(
             bid(1, Strain::Notrump),
@@ -151,13 +240,18 @@ fn direct_suit_defense(opened: Suit) -> Rules {
         Suit::Diamonds => (Suit::Clubs, Suit::Hearts),
         Suit::Hearts | Suit::Spades => (Suit::Clubs, Suit::Diamonds),
     };
-    rules
+    let rules = rules
         .rule(
             bid(2, Strain::Notrump),
             470,
             natural & len(low, 5..) & len(high, 5..) & (hcp(..=11) | hcp(16..)),
         )
-        .alert(UNUSUAL)
+        .alert(UNUSUAL);
+    if opened == Suit::Clubs {
+        rules.chain(strong_club_defense())
+    } else {
+        rules
+    }
 }
 
 fn overcall_advances(opened: Suit, overcall: Bid) -> Rules {
@@ -217,28 +311,33 @@ fn overcall_advances(opened: Suit, overcall: Bid) -> Rules {
 }
 
 fn takeout_advances(opened: Suit) -> Rules {
+    let natural = natural_suit_opening(opened);
     let mut rules = Rules::new()
         .rule(
             Call::Pass,
             600,
-            hcp(6..) & len(opened, 5..) & top_honors(opened, 2..),
+            natural.clone() & hcp(6..) & len(opened, 5..) & top_honors(opened, 2..),
         )
-        .rule(bid(2, Strain::from(opened)), 500, hcp(13..))
+        .rule(
+            bid(2, Strain::from(opened)),
+            500,
+            natural.clone() & hcp(13..),
+        )
         .alert(ADVANCE_CUE)
         .rule(
             bid(3, Strain::Notrump),
             450,
-            hcp(13..) & balanced() & stopper_in(opened),
+            natural.clone() & hcp(13..) & balanced() & stopper_in(opened),
         )
         .rule(
             bid(2, Strain::Notrump),
             380,
-            hcp(11..=12) & balanced() & stopper_in(opened),
+            natural.clone() & hcp(11..=12) & balanced() & stopper_in(opened),
         )
         .rule(
             bid(1, Strain::Notrump),
             320,
-            hcp(6..=10) & balanced() & stopper_in(opened),
+            natural.clone() & hcp(6..=10) & balanced() & stopper_in(opened),
         );
     for suit in Suit::ASC {
         if suit == opened {
@@ -249,14 +348,34 @@ fn takeout_advances(opened: Suit) -> Rules {
                 .rule(
                     bid(level, Strain::from(suit)),
                     250,
-                    hcp(..=8) & len(suit, 4..) & min_level_is(level, Strain::from(suit)),
+                    natural.clone()
+                        & hcp(..=8)
+                        & len(suit, 4..)
+                        & min_level_is(level, Strain::from(suit)),
                 )
                 .rule(
                     bid(level + 1, Strain::from(suit)),
                     300,
-                    hcp(9..=11) & len(suit, 4..) & min_level_is(level, Strain::from(suit)),
+                    natural.clone()
+                        & hcp(9..=11)
+                        & len(suit, 4..)
+                        & min_level_is(level, Strain::from(suit)),
                 );
         }
+    }
+    if opened == Suit::Clubs {
+        let artificial = artificial_strong_club();
+        rules = rules
+            .rule(
+                bid(2, Strain::Diamonds),
+                550,
+                artificial.clone() & longer_suit(Suit::Diamonds, Suit::Clubs),
+            )
+            .rule(
+                bid(2, Strain::Clubs),
+                540,
+                artificial & at_least_as_long(Suit::Clubs, Suit::Diamonds),
+            );
     }
     rules
 }
@@ -264,11 +383,7 @@ fn takeout_advances(opened: Suit) -> Rules {
 fn balancing_defense(opened: Suit) -> Rules {
     let natural = natural_suit_opening(opened);
     let mut rules = Rules::new()
-        .rule(
-            Call::Double,
-            500,
-            natural.clone() & hcp(9..) & short_in_their_suits() & unbid_support(1),
-        )
+        .rule(Call::Double, 500, natural.clone() & takeout_or_strong(9))
         .alert(TAKEOUT)
         .rule(
             bid(1, Strain::Notrump),
@@ -306,11 +421,7 @@ fn balancing_defense(opened: Suit) -> Rules {
 fn weak_two_defense(opened: Suit) -> Rules {
     let natural = natural_suit_opening(opened);
     let mut rules = Rules::new()
-        .rule(
-            Call::Double,
-            500,
-            natural.clone() & hcp(12..) & short_in_their_suits() & unbid_support(1),
-        )
+        .rule(Call::Double, 500, natural.clone() & takeout_or_strong(12))
         .alert(TAKEOUT)
         .rule(
             bid(2, Strain::Notrump),
@@ -343,11 +454,7 @@ fn higher_preempt_defense(level: u8, opened: Suit) -> Rules {
             .alert(COOPERATIVE)
     } else {
         Rules::new()
-            .rule(
-                Call::Double,
-                500,
-                natural.clone() & hcp(12..) & short_in_their_suits() & unbid_support(1),
-            )
+            .rule(Call::Double, 500, natural.clone() & takeout_or_strong(12))
             .alert(TAKEOUT)
     };
     for suit in Suit::ASC {
@@ -369,16 +476,20 @@ fn higher_preempt_defense(level: u8, opened: Suit) -> Rules {
 }
 
 fn doubler_rebid(opened: Suit, response: Suit) -> Rules {
+    let natural = natural_suit_opening(opened);
     let mut rules = Rules::new()
         .rule(
             bid(3, Strain::Notrump),
             360,
-            hcp(18..) & balanced() & stopper_in(opened),
+            natural.clone() & hcp(18..) & balanced() & stopper_in(opened),
         )
         .rule(
             bid(2, Strain::from(response)),
             340,
-            hcp(18..) & len(response, 4..) & min_level_is(2, Strain::from(response)),
+            natural.clone()
+                & hcp(18..)
+                & len(response, 4..)
+                & min_level_is(2, Strain::from(response)),
         );
     for suit in Suit::ASC {
         if suit == opened || suit == response {
@@ -388,7 +499,10 @@ fn doubler_rebid(opened: Suit, response: Suit) -> Rules {
             rules = rules.rule(
                 bid(level, Strain::from(suit)),
                 330,
-                hcp(18..) & len(suit, 5..) & min_level_is(level, Strain::from(suit)),
+                natural.clone()
+                    & hcp(18..)
+                    & len(suit, 5..)
+                    & min_level_is(level, Strain::from(suit)),
             );
         }
     }
@@ -444,6 +558,29 @@ fn landy_advance() -> Rules {
         )
 }
 
+fn strong_club_major_advance() -> Rules {
+    let artificial = artificial_strong_club();
+    Rules::new()
+        .rule(
+            bid(2, Strain::Spades),
+            250,
+            artificial.clone() & longer_suit(Suit::Spades, Suit::Hearts),
+        )
+        .rule(
+            bid(2, Strain::Hearts),
+            240,
+            artificial & at_least_as_long(Suit::Hearts, Suit::Spades),
+        )
+}
+
+fn strong_club_minor_signoff() -> Rules {
+    Rules::new().rule(Call::Pass, 100, artificial_strong_club())
+}
+
+fn strong_club_major_signoff() -> Rules {
+    Rules::new().rule(Call::Pass, 100, artificial_strong_club())
+}
+
 fn michaels_major_ask_answer(other_major: Suit) -> Rules {
     Rules::new()
         .rule(bid(3, Strain::Clubs), 250, len(Suit::Clubs, 5..))
@@ -479,7 +616,11 @@ fn entries(_: &Agreements) -> Vec<Entry> {
                     "{root} X - {} -",
                     bid(level, Strain::from(response))
                 )),
-                doubler_rebid(opened, response),
+                if opened == Suit::Clubs && response == Suit::Diamonds {
+                    doubler_rebid(opened, response).chain(strong_club_minor_signoff())
+                } else {
+                    doubler_rebid(opened, response)
+                },
             ));
         }
         for over in Suit::ASC {
@@ -528,6 +669,20 @@ fn entries(_: &Agreements) -> Vec<Entry> {
     }
     entries.extend(rows_of(Pattern::node("P* (1NT)"), notrump_defense()));
     entries.extend(rows_of(Pattern::node("P* (1NT) 2♣ -"), landy_advance()));
+    entries.extend(rows_of(
+        Pattern::node("P* (1♣) X - 2♣ -"),
+        strong_club_minor_signoff(),
+    ));
+    entries.extend(rows_of(
+        Pattern::node("P* (1♣) 1NT -"),
+        strong_club_major_advance(),
+    ));
+    for major in [Suit::Hearts, Suit::Spades] {
+        entries.extend(rows_of(
+            Pattern::node(&format!("P* (1♣) 1NT - {} -", bid(2, Strain::from(major)))),
+            strong_club_major_signoff(),
+        ));
+    }
     entries
 }
 

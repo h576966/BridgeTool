@@ -577,12 +577,44 @@ strength.
 
 ## Slam methods
 
+### General slam search in an uncontested game force
+
+PEN uses descriptive slow arrival when the opponents have remained silent and
+the partnership is already game-forced. Before a fit is known, a hand starts
+the general slam search at a known combined minimum of 29 HCP when it has useful
+shape to describe:
+
+- show the longest unshown four-card or longer side suit at the cheapest level
+  below 3NT;
+- otherwise rebid a previously shown six-card or longer suit below 3NT;
+- prefer a new side suit to repeating the long suit;
+- with no such descriptive action, place the contract normally, usually in
+  3NT.
+
+The descriptive continuation is natural, remains game forcing, and shows slam
+interest. It does not set the side suit as trumps by itself. Direct arrival in
+3NT instead declines this general shape-based search. The 29-point boundary is
+deliberately not lowered to 28; the existing fitted-slam measurements found the
+looser boundary over-aggressive.
+
+During this search, a below-game raise explicitly establishes trumps when the
+partnership's guaranteed lengths reach eight cards: two-card support opposite a
+shown six, three opposite five, or four opposite four. The raise promises the
+minimum support required for eight; ordinary fast-arrival game raises keep
+their existing, looser support meaning.
+
+This is a fallback agreement for unspecified continuations, not a replacement
+for an authored PEN relay, splinter, ask, quantitative-notrump sequence, or
+competitive treatment. It is disabled as soon as an opponent bids, doubles, or
+redoubles.
+
 ### Control bidding after a fit
 
-A new-suit bid is a control bid when a trump fit has been explicitly
+A non-trump suit bid is a control bid when a trump fit has been explicitly
 established, the partnership is game-forced or clearly making a slam try, and
 the call has no existing meaning as a relay, splinter, ask, or natural game
-try. A fit alone does not turn every new suit into a control: in a non-forcing
+try. This includes rebidding a side suit that was described naturally before
+trumps were set. A fit alone does not turn every new suit into a control: in a non-forcing
 invitational auction, new suits remain natural or help-suit game tries.
 
 The partnership uses mixed first- and second-round controls:
@@ -834,9 +866,28 @@ Use a simple Landy-plus-natural structure:
 | 2♦ / 2♥ / 2♠ | Natural, normally 5+ cards |
 | 2NT | Both minors, normally 5–5 or longer |
 
-Artificial and multi-meaning openings require separate defenses. No general
-meaning is assigned because the bid suit may be natural, may show another suit,
-or may show no suit at all.
+#### Against an artificial strong 1♣ opening
+
+Use a simple natural structure with two Mathe-style two-suiters. The two
+conventional calls are swapped from original Mathe so that 1NT shows the
+requested major-suit hand:
+
+| Call | Meaning |
+| --- | --- |
+| Double | Both minors, 5–5 or longer; weak or strong |
+| 1♦ / 1♥ / 1♠ | Natural, normally 5+ cards |
+| 1NT | Both majors, 5–5 or longer; weak or strong |
+| 2♣ | Natural, normally 6+ clubs |
+| 2♦ / 2♥ / 2♠ | Natural weak jump, normally 6+ cards |
+
+After Double or 1NT, advancer chooses the longer advertised suit, breaking a
+tie toward clubs or hearts respectively. The intervenor then normally passes.
+Direct natural one-level overcalls are uncapped so a strong one-suited hand is
+not forced into a Double whose meaning is two-suited.
+
+Other artificial and multi-meaning openings require separate defenses. No
+general meaning is assigned because the bid suit may be natural, may show
+another suit, or may show no suit at all.
 
 ### When our artificial or forcing call is doubled
 
@@ -889,7 +940,7 @@ The following competitive areas still need explicit agreements:
 - interference over an artificial ask or transfer after responder has acted;
 - detailed continuations after overcalls, takeout Doubles, and preemptive
   openings;
-- defenses to artificial and multi-meaning openings;
+- defenses to artificial and multi-meaning openings other than a strong 1♣;
 - vulnerability- and position-dependent adjustments.
 
 ## Questions to complete next

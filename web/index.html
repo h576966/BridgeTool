@@ -14,14 +14,26 @@
       <h1>BridgeTool</h1>
       <span>Powered by Pons</span>
     </div>
-    <div class="system-picker">
-      <label for="system-profile">Active system</label>
-      <div class="system-picker-row">
-        <select id="system-profile">
-          <option value="pons-american" selected>Pons American</option>
-          <option value="pen-club">PEN-Club</option>
-        </select>
-        <span id="system-profile-state" class="system-state" aria-live="polite">Full bidding</span>
+    <div class="system-pickers" aria-label="Partnership bidding systems">
+      <div class="system-picker">
+        <label for="system-profile-ns">N/S system</label>
+        <div class="system-picker-row">
+          <select id="system-profile-ns">
+            <option value="pons-american" selected>Pons American</option>
+            <option value="pen-club">PEN-Club</option>
+          </select>
+          <span id="system-profile-state-ns" class="system-state" aria-live="polite">Full</span>
+        </div>
+      </div>
+      <div class="system-picker">
+        <label for="system-profile-ew">E/W system</label>
+        <div class="system-picker-row">
+          <select id="system-profile-ew">
+            <option value="pons-american" selected>Pons American</option>
+            <option value="pen-club">PEN-Club</option>
+          </select>
+          <span id="system-profile-state-ew" class="system-state" aria-live="polite">Full</span>
+        </div>
       </div>
     </div>
     <nav aria-label="Main navigation">
@@ -173,8 +185,14 @@
       </div>
     </section>
     <section id="settings" class="hidden">
-      <div class="pen-only view-stack">
-        <div class="panel system-summary">
+      <div class="view-stack">
+        <div class="controls">
+          <label>Partnership <select id="s-pair">
+            <option value="ns" selected>North–South</option>
+            <option value="ew">East–West</option>
+          </select></label>
+        </div>
+        <div id="s-pen-summary" class="panel system-summary hidden">
           <p class="eyebrow">PEN-Club</p>
           <div class="system-summary-heading">
             <h2>Fixed playable draft</h2>
@@ -189,17 +207,11 @@
           </dl>
           <a class="button-link" href="#opening-audit">Open Opening Audit</a>
         </div>
-      </div>
-      <div class="pons-only view-stack">
-        <div class="boardinfo">Pons American conventions apply to the next Practice or Demo deal.</div>
-        <div class="controls">
-          <label>Partnership <select id="s-pair">
-            <option value="ns" selected>North–South</option>
-            <option value="ew">East–West</option>
-          </select></label>
+        <div id="s-pons-settings" class="view-stack">
+          <div class="boardinfo">Pons American conventions apply to the next Practice or Demo deal.</div>
+          <div id="s-options"></div>
+          <button id="s-reset" class="secondary">Reset North–South to defaults</button>
         </div>
-        <div id="s-options"></div>
-        <button id="s-reset" class="secondary">Reset North–South to defaults</button>
       </div>
     </section>
   </main>

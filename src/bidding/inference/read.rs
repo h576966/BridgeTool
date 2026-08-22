@@ -520,6 +520,7 @@ impl Inferences {
             let first_action_of_side = !side_acted[lane % 2];
             let substituted_call = index < 64 && masks.substituted >> index & 1 != 0;
             let artificial_call = index < 64 && masks.artificial >> index & 1 != 0;
+            let authored_control_call = index < 64 && masks.control_bid >> index & 1 != 0;
             let authored_call = index < 64 && masks.authored >> index & 1 != 0;
 
             if substituted_call {
@@ -606,6 +607,15 @@ impl Inferences {
                             highest = Some(bid);
                         }
                         continue;
+                    }
+                    if authored_control_call
+                        && let Some(trump) =
+                            latest_agreed_suit(auction, index, lane, &natural_lane_suits)
+                    {
+                        #[allow(clippy::cast_possible_truncation)]
+                        {
+                            control_bid = Some((index as u8, trump));
+                        }
                     }
                     // Their direct 1NT overcall of our one-suit opening: natural,
                     // the strong-notrump band, read off their scheme's opening
@@ -886,7 +896,23 @@ impl Inferences {
                                     .length(suit)
                                     .min
                                     .max(projected_lane_lengths[(lane + 2) % 4][suit as usize]);
-                                if partner_length < 6 {
+                                if partner_length >= 6 {
+                                    let game_level = if matches!(suit, Suit::Clubs | Suit::Diamonds)
+                                    {
+                                        5
+                                    } else {
+                                        4
+                                    };
+                                    // A raise of a known six-card suit below
+                                    // game is constructive fit-setting, not the
+                                    // loose doubleton-or-honour fast-arrival
+                                    // raise described above. Two cards are the
+                                    // sound minimum that establishes eight.
+                                    if sound_lengths && bid.level.get() < game_level {
+                                        players[who]
+                                            .narrow_length(suit, Range::at_least(2, LENGTH_CAP));
+                                    }
+                                } else {
                                     let partner_rebid_it =
                                         rebid_lane_suits[(lane + 2) % 4] & mask != 0;
                                     let delayed = (jump == 0 || partner_rebid_it)
@@ -1284,6 +1310,19 @@ impl Inferences {
             }
         }
 
+        apply_below_game_eight_card_fits(auction, len, &mut players, sound_lengths);
+        if control_bid.is_none()
+            && let Some(index) = (0..auction.len().min(64))
+                .rev()
+                .find(|&index| masks.control_bid >> index & 1 != 0)
+            && let Some(trump) = public_trump_for_control(auction, len, index, &players)
+        {
+            #[allow(clippy::cast_possible_truncation)]
+            {
+                control_bid = Some((index as u8, trump));
+            }
+        }
+
         Self::assemble(
             players,
             &overlay_unions,
@@ -1343,6 +1382,110 @@ enum HighBid {
     Control { trump: Suit, shower: usize },
     /// Not the classifier's call — fall through to the generic walk
     Unclaimed,
+}
+
+fn apply_below_game_eight_card_fits(
+    auction: &[Call],
+    len: usize,
+    players: &mut [Envelope; 4],
+    sound_lengths: bool,
+) {
+    if !sound_lengths {
+        return;
+    }
+    let opening = auction.iter().position(|call| *call != Call::Pass);
+    for (index, &call) in auction.iter().enumerate() {
+        let Call::Bid(shown) = call else {
+            continue;
+        };
+        let Some(suit) = shown.strain.suit() else {
+            continue;
+        };
+        let game_level = if matches!(suit, Suit::Clubs | Suit::Diamonds) {
+            5
+        } else {
+            4
+        };
+        if shown.level.get() >= game_level {
+            continue;
+        }
+        let side_bid_count = auction[..=index]
+            .iter()
+            .enumerate()
+            .filter(|(prior, call)| prior % 2 == index % 2 && matches!(call, Call::Bid(_)))
+            .count();
+        let opponents_silent = opening.is_some_and(|opening| {
+            auction[opening..index]
+                .iter()
+                .enumerate()
+                .all(|(offset, call)| (opening + offset) % 2 == index % 2 || *call == Call::Pass)
+        });
+        // The general PEN search first describes shape and only then sets a
+        // fit, so the fit-setting raise is at least the partnership's fifth
+        // bid. Keeping that structural boundary also leaves ordinary delayed
+        // preferences (for example 1S-1NT-2m-2S) at their existing loose
+        // doubleton-or-honour meaning.
+        if side_bid_count < 5 || !opponents_silent {
+            continue;
+        }
+        let who = relative_of(len, index) as usize;
+        let partner = (who + 2) % 4;
+        let partner_length = players[partner].length(suit).min;
+        if partner_length >= 4 {
+            let needed = 8u8.saturating_sub(partner_length);
+            players[who].narrow_length(suit, Range::at_least(needed, LENGTH_CAP));
+        }
+    }
+}
+
+fn public_trump_for_control(
+    auction: &[Call],
+    len: usize,
+    control: usize,
+    players: &[Envelope; 4],
+) -> Option<Suit> {
+    let who = relative_of(len, control) as usize;
+    let partner = (who + 2) % 4;
+    let named = match auction[control] {
+        Call::Bid(shown) => shown.strain.suit(),
+        Call::Pass | Call::Double | Call::Redouble => None,
+    };
+    Suit::ASC
+        .into_iter()
+        .filter(|&suit| {
+            Some(suit) != named
+                && players[who].length(suit).min > 0
+                && players[partner].length(suit).min > 0
+                && players[who].length(suit).min + players[partner].length(suit).min >= 8
+        })
+        .filter_map(|suit| {
+            auction[..control]
+                .iter()
+                .enumerate()
+                .rev()
+                .find_map(|(index, call)| {
+                    matches!(call, Call::Bid(shown) if shown.strain.suit() == Some(suit))
+                        .then_some((index, suit))
+                })
+        })
+        .max_by_key(|&(index, suit)| (index, suit))
+        .map(|(_, suit)| suit)
+}
+
+fn latest_agreed_suit(
+    auction: &[Call],
+    before: usize,
+    lane: usize,
+    natural_lane_suits: &[u8; 4],
+) -> Option<Suit> {
+    let common = natural_lane_suits[lane] & natural_lane_suits[(lane + 2) % 4];
+    auction[..before].iter().rev().find_map(|call| {
+        let Call::Bid(shown) = call else {
+            return None;
+        };
+        let suit = shown.strain.suit()?;
+        (common & (1 << suit as u8) != 0).then_some(suit)
+    })
 }
 
 /// Classify an unalerted suit bid at the four level or higher: control bid or
