@@ -5,6 +5,8 @@ use crate::bidding::rows::{Package, Pattern, rows_of};
 use crate::bidding::{Alert, Rules};
 use contract_bridge::{Bid, Strain, Suit};
 
+use super::strength::preempt_strength;
+
 pub(super) const STRONG_CLUB: Alert = Alert("pen:strong-club");
 pub(super) const SPADE_OPENING: Alert = Alert("pen:one-spade-union");
 pub(super) const SPADE_DIAMOND: Alert = Alert("pen:spade-diamond-opening");
@@ -122,14 +124,34 @@ pub(super) fn rules() -> Rules {
         .rule(
             Bid::new(2, Strain::Hearts),
             200,
-            hcp(5..=9) & len(Suit::Hearts, 6..) & len(Suit::Spades, ..6),
+            preempt_strength(Suit::Hearts) & len(Suit::Hearts, 6..) & len(Suit::Spades, ..6),
         )
         .rule(
             Bid::new(2, Strain::Spades),
             200,
-            hcp(5..=9) & len(Suit::Spades, 6..) & len(Suit::Hearts, ..6),
+            preempt_strength(Suit::Spades) & len(Suit::Spades, 6..) & len(Suit::Hearts, ..6),
         )
         .rule(Bid::new(2, Strain::Notrump), 190, hcp(22..=24) & balanced())
+        .rule(
+            Bid::new(3, Strain::Clubs),
+            210,
+            preempt_strength(Suit::Clubs) & len(Suit::Clubs, 7..),
+        )
+        .rule(
+            Bid::new(3, Strain::Diamonds),
+            210,
+            preempt_strength(Suit::Diamonds) & len(Suit::Diamonds, 7..),
+        )
+        .rule(
+            Bid::new(3, Strain::Hearts),
+            210,
+            preempt_strength(Suit::Hearts) & len(Suit::Hearts, 7..),
+        )
+        .rule(
+            Bid::new(3, Strain::Spades),
+            210,
+            preempt_strength(Suit::Spades) & len(Suit::Spades, 7..),
+        )
 }
 
 pub(super) fn package() -> Package {

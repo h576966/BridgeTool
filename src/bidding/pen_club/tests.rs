@@ -24,8 +24,17 @@ fn hand(text: &str) -> Hand {
 }
 
 fn best(system: &impl Bidder, auction: &[Call], text: &str) -> Call {
+    best_vul(system, auction, text, RelativeVulnerability::NONE)
+}
+
+fn best_vul(
+    system: &impl Bidder,
+    auction: &[Call],
+    text: &str,
+    vul: RelativeVulnerability,
+) -> Call {
     let logits: Logits = system
-        .classify(hand(text), RelativeVulnerability::NONE, auction)
+        .classify(hand(text), vul, auction)
         .expect("PEN-Club covers the decision through book or floor");
     logits
         .iter()
@@ -91,6 +100,10 @@ fn opening_call(opening: Opening) -> Call {
         Opening::TwoHearts => call(2, Strain::Hearts),
         Opening::TwoSpades => call(2, Strain::Spades),
         Opening::TwoNotrump => call(2, Strain::Notrump),
+        Opening::ThreeClubs => call(3, Strain::Clubs),
+        Opening::ThreeDiamonds => call(3, Strain::Diamonds),
+        Opening::ThreeHearts => call(3, Strain::Hearts),
+        Opening::ThreeSpades => call(3, Strain::Spades),
     }
 }
 
@@ -151,11 +164,13 @@ fn opening_hcp_boundaries_use_raw_hcp() {
 fn weak_major_and_two_notrump_boundaries_match_the_audit() {
     for (text, expected) in [
         ("432.KJT987.432.2", None),
-        ("A32.JT9876.432.2", Some(Opening::TwoHearts)),
+        ("A32.JT9876.432.2", None),
+        ("A32.QT9876.432.2", Some(Opening::TwoHearts)),
         ("A32.KQ9876.432.2", Some(Opening::TwoHearts)),
         ("A32.KQJ987.432.2", Some(Opening::OneHeart)),
         ("KJT987.432.432.2", None),
-        ("JT9876.A32.432.2", Some(Opening::TwoSpades)),
+        ("JT9876.A32.432.2", None),
+        ("QT9876.A32.432.2", Some(Opening::TwoSpades)),
         ("KQ9876.A32.432.2", Some(Opening::TwoSpades)),
         ("KQJ987.A32.432.2", Some(Opening::OneDiamond)),
         ("AKQ2.AK2.QJ3.Q32", Some(Opening::OneClub)),
@@ -171,6 +186,56 @@ fn weak_major_and_two_notrump_boundaries_match_the_audit() {
             authored_root_calls(text),
             expected.into_iter().map(opening_call).collect::<Vec<_>>(),
             "authored root boundary for {text}",
+        );
+    }
+}
+
+#[test]
+fn preempts_use_the_agreed_suit_quality_and_unfavorable_floor() {
+    let system = partnership();
+    for (text, expected) in [
+        ("A32.QT9876.432.2", call(2, Strain::Hearts)),
+        ("A32.JT9876.432.2", Call::Pass),
+        ("32.QT98765.A32.2", call(3, Strain::Hearts)),
+        ("32.JT98765.A32.2", Call::Pass),
+        ("32.2.A32.QT98765", call(3, Strain::Clubs)),
+    ] {
+        assert_eq!(best(&system, &[], text), expected, "normal: {text}");
+    }
+
+    let unfavorable = RelativeVulnerability::WE;
+    for (text, expected) in [
+        ("A32.K98765.432.2", call(2, Strain::Hearts)),
+        ("A32.QJ9876.432.2", call(2, Strain::Hearts)),
+        ("K32.QT9876.J32.J", call(2, Strain::Hearts)),
+        ("A32.Q98765.J32.2", Call::Pass),
+        ("K32.K98765.432.2", Call::Pass),
+        ("Q2.KQ98765.432.2", call(3, Strain::Hearts)),
+        ("32.Q987654.AJ2.2", Call::Pass),
+    ] {
+        assert_eq!(
+            best_vul(&system, &[], text, unfavorable),
+            expected,
+            "unfavorable: {text}",
+        );
+    }
+
+    let their_american = american_book(&Agreements::default()).bind();
+    let defense = partnership().with_opponents(&their_american);
+    assert_eq!(
+        best(&defense, &[call(1, Strain::Clubs)], "32.Q98765.K32.32"),
+        call(2, Strain::Hearts),
+        "the normal weak-jump gate accepts a queen-high suit",
+    );
+    for (text, expected) in [
+        ("Q2.K98765.J2.J32", call(2, Strain::Hearts)),
+        ("Q2.K98765.J2.432", Call::Pass),
+        ("Q2.Q98765.J2.Q32", Call::Pass),
+    ] {
+        assert_eq!(
+            best_vul(&defense, &[call(1, Strain::Clubs)], text, unfavorable,),
+            expected,
+            "unfavorable weak jump: {text}",
         );
     }
 }
@@ -391,6 +456,23 @@ fn strong_hands_still_double_disclosed_natural_openings() {
 }
 
 #[test]
+fn natural_major_overcall_beats_a_misshapen_minor_takeout_double() {
+    let their_american = american_book(&Agreements::default()).bind();
+    let ours = partnership().with_opponents(&their_american);
+
+    assert_eq!(
+        best(&ours, &[call(1, Strain::Clubs)], "KQ.KQT94.KJ943.3",),
+        call(1, Strain::Hearts),
+        "a 5-5 hand with only two spades overcalls its five-card major",
+    );
+    assert_eq!(
+        best(&ours, &[call(1, Strain::Clubs)], "KQ32.AJ3.KJ942.2",),
+        Call::Double,
+        "an ordinary takeout double retains four-three majors",
+    );
+}
+
+#[test]
 fn artificial_calls_are_explicitly_alerted() {
     let system = pen_club_book_default();
     let pass = Call::Pass;
@@ -562,6 +644,174 @@ fn one_diamond_finds_spades_after_a_low_overcall() {
             "J32.A32.432.K432",
         ),
         call(1, Strain::Spades),
+    );
+}
+
+#[test]
+fn one_diamond_raises_spades_with_distribution_after_one_notrump() {
+    let their_american = american_book(&Agreements::default()).bind();
+    let system = partnership().with_opponents(&their_american);
+
+    assert_eq!(
+        best(
+            &system,
+            &[call(1, Strain::Diamonds), call(1, Strain::Notrump),],
+            "Q862..J652.JT975",
+        ),
+        call(2, Strain::Spades),
+        "four HCP plus a side-suit void is seven support points in the known fit",
+    );
+}
+
+#[test]
+fn one_club_negative_transfers_cover_every_natural_one_level_overcall() {
+    let system = partnership();
+    let one_club = call(1, Strain::Clubs);
+    for (overcall, text, expected) in [
+        (call(1, Strain::Diamonds), "432.QJ987.32.432", Call::Double),
+        (
+            call(1, Strain::Diamonds),
+            "QJ987.432.32.432",
+            call(1, Strain::Hearts),
+        ),
+        (
+            call(1, Strain::Diamonds),
+            "432.432.32.QJ987",
+            call(1, Strain::Spades),
+        ),
+        (call(1, Strain::Hearts), "QJ987.432.32.432", Call::Double),
+        (
+            call(1, Strain::Hearts),
+            "432.432.32.QJ987",
+            call(1, Strain::Spades),
+        ),
+        (
+            call(1, Strain::Hearts),
+            "432.432.QJ987.32",
+            call(1, Strain::Notrump),
+        ),
+        (call(1, Strain::Spades), "432.QJ987.32.432", Call::Double),
+        (
+            call(1, Strain::Spades),
+            "432.432.32.QJ987",
+            call(1, Strain::Notrump),
+        ),
+        (
+            call(1, Strain::Spades),
+            "432.432.QJ987.32",
+            call(2, Strain::Clubs),
+        ),
+    ] {
+        assert_eq!(
+            best(&system, &[one_club, overcall], text),
+            expected,
+            "{text}"
+        );
+    }
+
+    assert_eq!(
+        best(
+            &system,
+            &[one_club, call(1, Strain::Spades)],
+            "432.432.432.5432",
+        ),
+        Call::Pass,
+        "a negative without a five-card unbid suit may still pass",
+    );
+}
+
+#[test]
+fn one_club_reopening_and_transfer_rebids_are_descriptive() {
+    let p = Call::Pass;
+    let one_club = call(1, Strain::Clubs);
+    let one_spade = call(1, Strain::Spades);
+    let their_american = american_book(&Agreements::default()).bind();
+    let system = partnership().with_opponents(&their_american);
+
+    let start = [p, p, one_club, one_spade];
+    assert_eq!(
+        best(&system, &start, "96532.J8763.A7.J"),
+        Call::Double,
+        "the reported North hand shows its five hearts",
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[p, p, one_club, one_spade, Call::Double, p],
+            "2.AKQ.KJ96432.A8",
+        ),
+        call(2, Strain::Diamonds),
+        "opener may decline the heart transfer to show long diamonds",
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[p, p, one_club, one_spade, p, p],
+            "2.AKQ.KJ96432.A8",
+        ),
+        call(2, Strain::Diamonds),
+        "a natural one-level overcall may not be passed out",
+    );
+
+    assert_eq!(
+        best(&system, &[one_club, one_spade, p, p], "AQ2.AK32.KQ3.J32",),
+        call(1, Strain::Notrump),
+    );
+    assert_eq!(
+        best(&system, &[one_club, one_spade, p, p], "32.AKQ2.KQJ3.A32",),
+        Call::Double,
+    );
+    assert_eq!(
+        best(&system, &[one_club, one_spade, p, p], "AKQ2.AQ32.Q32.K2",),
+        call(2, Strain::Clubs),
+        "2C is the artificial 20+ relay",
+    );
+}
+
+#[test]
+fn one_club_interference_transfers_are_alerted_and_readable() {
+    let system = partnership();
+    let one_club = call(1, Strain::Clubs);
+    let one_spade = call(1, Strain::Spades);
+    let inf = system.infer(
+        RelativeVulnerability::NONE,
+        &[one_club, one_spade, Call::Double],
+    );
+    assert!(inf.rho().length(Suit::Hearts).min >= 5);
+    assert!(inf.rho().strength.hcp.max <= 8);
+
+    let strong = system.infer(
+        RelativeVulnerability::NONE,
+        &[
+            one_club,
+            one_spade,
+            Call::Pass,
+            Call::Pass,
+            call(2, Strain::Clubs),
+        ],
+    );
+    assert!(strong.rho().strength.hcp.min >= 20);
+
+    let book = pen_club_book_default();
+    assert_alerted_at(
+        &book.competitive.0,
+        &[one_club, one_spade],
+        &[
+            Call::Double,
+            call(1, Strain::Notrump),
+            call(2, Strain::Clubs),
+            call(2, Strain::Spades),
+        ],
+    );
+    assert_alerted_at(
+        &book.competitive.0,
+        &[one_club, one_spade, Call::Pass, Call::Pass],
+        &[Call::Double, call(2, Strain::Clubs)],
+    );
+    assert_alerted_at(
+        &book.competitive.0,
+        &[one_club, one_spade, Call::Double, Call::Pass],
+        &[call(2, Strain::Hearts)],
     );
 }
 
@@ -1167,6 +1417,213 @@ fn confirmed_natural_defenses_have_authored_actions() {
     assert_eq!(
         best(&system, &[call(3, Strain::Hearts)], "KQJ2.2.AJ32.KQJ2",),
         Call::Double,
+    );
+}
+
+#[test]
+fn doubled_artificial_calls_keep_their_pen_continuations() {
+    let system = partnership();
+    let pass = Call::Pass;
+
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(1, Strain::Clubs),
+                pass,
+                call(1, Strain::Diamonds),
+                Call::Double,
+            ],
+            "K9.AKQ42.AJ73.A4",
+        ),
+        call(1, Strain::Hearts),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[call(1, Strain::Diamonds), Call::Double],
+            "Q862.3.J652.JT97",
+        ),
+        call(1, Strain::Spades),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(1, Strain::Diamonds),
+                pass,
+                call(1, Strain::Hearts),
+                Call::Double,
+            ],
+            "AJ97.K97652.Q3.A",
+        ),
+        call(1, Strain::Spades),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(1, Strain::Hearts),
+                pass,
+                call(1, Strain::Spades),
+                Call::Double,
+            ],
+            "K63.AJ7543.J42.A",
+        ),
+        call(1, Strain::Notrump),
+    );
+}
+
+#[test]
+fn doubled_two_suiters_reach_an_advertised_suit() {
+    let system = partnership();
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(1, Strain::Notrump),
+                call(2, Strain::Clubs),
+                Call::Double,
+            ],
+            "32.98765.432.432",
+        ),
+        call(2, Strain::Hearts),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(1, Strain::Hearts),
+                call(2, Strain::Hearts),
+                Call::Double,
+            ],
+            "32.432.432.98765",
+        ),
+        call(2, Strain::Spades),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(1, Strain::Hearts),
+                call(2, Strain::Notrump),
+                Call::Double,
+            ],
+            "32.432.32.QJ9876",
+        ),
+        call(3, Strain::Clubs),
+    );
+}
+
+#[test]
+fn doubled_natural_partscores_run_only_with_a_safer_suit() {
+    let system = partnership();
+    let pass = Call::Pass;
+
+    assert_eq!(
+        best(
+            &system,
+            &[call(2, Strain::Spades), Call::Double],
+            "2.KQJ87.432.5432",
+        ),
+        call(3, Strain::Hearts),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[call(2, Strain::Spades), Call::Double, pass, pass,],
+            "KT7632.QJ865.4.3",
+        ),
+        call(3, Strain::Hearts),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(1, Strain::Clubs),
+                call(1, Strain::Hearts),
+                Call::Double,
+            ],
+            "QJ987.32.432.432",
+        ),
+        call(1, Strain::Spades),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(1, Strain::Clubs),
+                call(1, Strain::Hearts),
+                Call::Double,
+                pass,
+                pass,
+            ],
+            "32.KQJ87.QJ987.3",
+        ),
+        call(2, Strain::Diamonds),
+    );
+}
+
+#[test]
+fn doubled_splinters_and_controls_cannot_become_the_contract() {
+    let system = partnership();
+    let pass = Call::Pass;
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(1, Strain::Diamonds),
+                pass,
+                call(4, Strain::Clubs),
+                Call::Double,
+            ],
+            "AQ95.Q.Q92.AJT84",
+        ),
+        call(4, Strain::Spades),
+    );
+    assert_eq!(
+        best(
+            &system,
+            &[
+                call(1, Strain::Diamonds),
+                pass,
+                call(4, Strain::Clubs),
+                pass,
+                call(4, Strain::Hearts),
+                Call::Double,
+            ],
+            "K643.8432.KJ653.",
+        ),
+        call(4, Strain::Spades),
+    );
+}
+
+#[test]
+fn contested_four_major_fallback_needs_fit_and_values_or_favorable_sacrifice() {
+    let system = partnership();
+    let auction = [
+        call(1, Strain::Diamonds),
+        Call::Pass,
+        call(1, Strain::Spades),
+        call(2, Strain::Clubs),
+        call(2, Strain::Spades),
+        Call::Double,
+    ];
+    let low = hand("QJT92.4.J532.983");
+    let blocked = system
+        .classify(low, RelativeVulnerability::NONE, &auction)
+        .expect("fallback covers the competitive decision");
+    assert_eq!(
+        blocked.0[call(4, Strain::Spades)],
+        f32::NEG_INFINITY,
+        "a weak nine-card fit is not enough at equal vulnerability",
+    );
+    let favorable = system
+        .classify(low, RelativeVulnerability::THEY, &auction)
+        .expect("fallback covers the favorable sacrifice");
+    assert!(
+        favorable.0[call(4, Strain::Spades)].is_finite(),
+        "a nine-card fit may compete to game only at favorable vulnerability",
     );
 }
 

@@ -17,8 +17,9 @@ opening aligned with the executable root classifier.
 
 ## Opening system
 
-All first-pass strength tests use raw Milton Work HCP. No position,
-vulnerability, suit-quality, or judgment adjustment is encoded yet.
+All first-pass strength tests use raw Milton Work HCP. Preempts have the
+explicit vulnerability and suit-quality adjustment described below; other
+position, vulnerability, and judgment adjustments are not encoded.
 
 The implemented priority is:
 
@@ -31,6 +32,7 @@ The implemented priority is:
 5. The limited minor-two-suiter 1♠.
 6. The 16–19 strong-club 1♠ branch.
 7. Other 16+ hands open 1♣, except balanced 22–24 hands, which open 2NT.
+8. Weak 2♥/2♠ with six cards, or a three-level preempt with seven cards.
 
 Meanings:
 
@@ -50,8 +52,15 @@ Meanings:
   4432, 5332, or 4441 with a singleton minor.
 - **2♣:** 11–15 HCP, 6+ clubs, no four-card major, and at most four diamonds.
 - **2♦:** 11–15 HCP, 6+ diamonds, no four-card major, and at most four clubs.
-- **2♥/2♠:** 5–9 HCP and 6+ cards in the opened major.
+- **2♥/2♠:** 5–9 HCP, 6+ cards, and A, K, or Q in the opened major.
 - **2NT:** 22–24 HCP, balanced.
+- **3♣/3♦/3♥/3♠:** 5–9 HCP, 7+ cards, and A, K, or Q in the opened suit.
+
+When vulnerable against non-vulnerable opponents, both preempt families use a
+7–9 HCP floor and require A, K, QJ, or QT in the long suit. Weak jump overcalls
+reuse the same contextual gate. Opening Audit has no vulnerability input, so it
+shows the normal/favorable 5–9 and A/K/Q eligibility; executable bidding applies
+the stricter unfavorable rule at the table.
 
 Weak 5–5+ minors do **not** open 2NT. That treatment has been considered but is
 not approved.
@@ -63,11 +72,14 @@ The current authored book contains:
 - the PEN 1♣ negative, positive-major, balanced, natural-minor, weak jump-major,
   and both-minor response families; the documented 1♣–1♦ rebids; positive-major
   support and side-suit rebids; and the readable parts of the positive-minor
-  continuations;
+  continuations; plus negative transfers over natural one-level interference,
+  natural opener descriptions, the cooperative reopening Double, and the
+  artificial 20+ reopening 2♣;
 - the documented 1♦ responses, the three-card heart-support rebid, the
   passable-spade-response rebids, the 15+ balanced 3NT game action with
   three-card support, direct void splinters and RKCB, plus the natural
-  spade-fit action after `1♦ (1♥)`;
+  spade-fit actions after `1♦ (1♥)` and `1♦ (1NT)`, with the latter using
+  fit-aware support points so useful shortness can justify a competitive 2♠;
 - the PEN 1♥ response ladder, cheap relay, forcing 1NT spade response, relay
   rebids, maximum rebids, raises, minor responses, and the corresponding 15+
   balanced 3NT game action with three-card heart support;
@@ -83,9 +95,15 @@ The current authored book contains:
   specific-king continuations, useful-void responses, Exclusion RKCB, and
   ROPI/DOPI/DEPO at their authored trump-fit anchors;
 - natural direct and balancing overcalls, takeout and responsive Doubles,
+  including the four-three-major shape floor for an ordinary Double of a
+  natural minor and the separate raw-17+ any-shape branch,
   advances, Michaels, Unusual 2NT, defenses through four-level preempts,
   Landy-plus-natural defense to a disclosed natural 1NT, and the simple
-  two-suiter-plus-natural defense to an artificial strong 1♣.
+  two-suiter-plus-natural defense to an artificial strong 1♣; plus authored
+  doubled tails for natural overcalls, Landy, Michaels, and Unusual 2NT;
+- system-on continuations when 1♣, 1♦, 1♥, their negative responses or relays
+  are doubled, and conservative natural escapes from doubled natural
+  two-level openings and overcalls.
 
 Every artificial opening, relay, preference, transfer, and forced completion
 is alerted and backed by a machine-readable constraint. Inference tests verify
@@ -117,6 +135,13 @@ slam trigger. The learned
 American/Dutch floor is not used: its neural regime and convention card do not
 describe PEN-Club's artificial 1♣, 1♦, and 1♠ openings.
 
+In competition the fallback blocks an unauthored four-of-a-major action unless
+there is a known eight-card fit with at least 25 combined raw HCP, or a known
+nine-card fit while non-vulnerable against vulnerable opponents. Authored game
+forces bypass that gate. Known splinter fits are retained after interference,
+and “below game” is measured against their actual agreed trump so a doubled
+control bid cannot be passed out below the correct game.
+
 The web Book view displays only authored nodes from `pen_club_book`; fallback
 calls are intentionally not rendered as if they were authored PEN doctrine.
 
@@ -126,12 +151,12 @@ calls are intentionally not rendered as if they were authored PEN doctrine.
 - later 1♦, 1♥, Stayman, minor-transfer, ask, and game-placement sequences whose
   exact meanings or forcing status are not agreed;
 - Transfer Rubensohl over 1NT interference and interference over later asks;
+- interference above the one-level over the artificial strong 1♣;
 - exact penalty-conversion gates, fit-based distributional upgrades, and
-  vulnerability adjustments;
+  vulnerability adjustments outside the preempt gate;
 - defenses to artificial or multi-meaning opponent openings other than a
   strong 1♣;
-- higher preempts and the running-major 3NT opening, because the source names
-  them but does not give an objective strength/suit-quality gate.
+- higher preempts above the three-level and the running-major 3NT opening.
 
 The fallback may choose a legal natural call in these positions, but that call
 is not rendered in the Book view or recorded as authored PEN doctrine.
@@ -159,10 +184,39 @@ by the existing `bba-score` release binary under both scorers.
 
 This measured the earlier executable implementation, not the current code or
 the intrinsic merit of a completed PEN-Club card. It predates the expanded
-constructive/defensive packages and the PEN-safe slam ceiling. The planned
-5,000-board rerun requires a clean versioned commit so its system version,
-fresh seeds, vulnerabilities, command arguments, plain-DD score, and
-perfect-defense score can be reproduced. No new strength claim is made here.
+constructive/defensive packages and the PEN-safe slam ceiling.
+
+### Current clean-commit rerun
+
+A fresh 5,000-board rerun per vulnerability on commit `ae736517` used seed
+`1787404554`. Every table contained exactly one PEN-Club partnership and one
+Pons American partnership: PEN sat N/S at table A and E/W at table B, with the
+pairs' actual opponent books attached in both directions. PEN therefore never
+faced another PEN partnership.
+
+| Vulnerability | Plain DD IMPs/board | Perfect-defense IMPs/board | Divergent |
+| --- | ---: | ---: | ---: |
+| none | −1.016 [−1.154, −0.879] | −0.922 [−1.091, −0.753] | 4,133 / 5,000 |
+| both | −1.018 [−1.197, −0.839] | −1.137 [−1.354, −0.921] | 4,112 / 5,000 |
+
+All four cells still favor Pons American with the 95% confidence interval
+clear of zero. The selected worst-tail audit is diagnostic rather than a
+population sample: nine of the ten largest non-vulnerable plain-DD losses ended
+with PEN declaring a doubled contract, including several artificial responses
+or splinters that were passed out after interference. This points to unfinished
+disturbed continuations as an important remaining implementation weakness.
+
+The subsequent doubled-auction repair directly addresses that diagnostic tail:
+system-on forcing continuations, two-suiter landing bids, conservative natural
+runouts, splinter/control signoffs, and the competitive four-major gate are now
+authored or enforced. A new A/B run is required before attributing any measured
+strength change to those repairs.
+
+The newer figures are numerically better than the historical pilot, especially
+under perfect-defense scoring, but the runs used different commits and seeds;
+that contrast is longitudinal context, not a causal A/B attribution to any one
+change. It still measures the current implementation rather than the intrinsic
+merit of a completed PEN-Club card.
 
 ## Open system questions
 
@@ -178,5 +232,6 @@ perfect-defense score can be reproduced. No new strength claim is made here.
 - The exact hand gate for a penalty double after a natural 2M overcall is not
   specified. The current provisional split uses 9+ HCP with four trumps for
   double and at most 8 HCP for the signoff-oriented other-major bid.
-- Objective gates for three-level preempts and a “running major” 3NT opening.
-- Position, vulnerability, and suit-quality adjustments.
+- Objective gates for higher preempts and a “running major” 3NT opening.
+- Position, vulnerability, and suit-quality adjustments outside the confirmed
+  preempt gate.

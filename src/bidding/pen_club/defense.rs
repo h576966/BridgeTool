@@ -3,7 +3,8 @@
 use crate::bidding::agreements::Agreements;
 use crate::bidding::constraint::{
     Cons, Constraint, and, at_least_as_long, balanced, described, hcp, len, longer_suit,
-    min_level_is, partner_shown_len, short_in_their_suits, stopper_in, top_honors, unbid_support,
+    min_level_is, or, partner_shown_len, short_in_their_suits, stopper_in, top_honors,
+    unbid_support,
 };
 use crate::bidding::inference::{Envelope, Relative, relative_of};
 use crate::bidding::rows::{Entry, Package, Pattern, rows_of};
@@ -11,11 +12,15 @@ use crate::bidding::{Alert, Rules};
 use contract_bridge::auction::Call;
 use contract_bridge::{Bid, Hand, Strain, Suit};
 
+use super::strength::preempt_strength;
+
 const TAKEOUT: Alert = Alert("pen:takeout-double");
 const COOPERATIVE: Alert = Alert("pen:cooperative-double");
+const BUSINESS: Alert = Alert("pen:business-redouble");
 const MICHAELS: Alert = Alert("pen:michaels");
 const UNUSUAL: Alert = Alert("pen:unusual-two-notrump");
 const ADVANCE_CUE: Alert = Alert("pen:overcall-advance-cue");
+const MICHAELS_ASK: Alert = Alert("pen:michaels-minor-ask");
 const RESPONSIVE: Alert = Alert("pen:responsive-double");
 const LANDY: Alert = Alert("pen:landy");
 const STRONG_CLUB_MINORS: Alert = Alert("pen:strong-club-defense-minors");
@@ -95,6 +100,16 @@ fn takeout_or_strong(minimum: u8) -> Cons<impl Constraint + Clone> {
     (hcp(minimum..=16) & !balanced() & short_in_their_suits() & unbid_support(1)) | hcp(17..)
 }
 
+fn minor_takeout_or_strong(minimum: u8) -> Cons<impl Constraint + Clone> {
+    (hcp(minimum..=16)
+        & !balanced()
+        & short_in_their_suits()
+        & unbid_support(1)
+        & and([Suit::Hearts, Suit::Spades], 3..=4)
+        & or([Suit::Hearts, Suit::Spades], 4..=4))
+        | hcp(17..)
+}
+
 /// Simple, Mathe-style interference over an artificial strong 1♣, with the
 /// two two-suited calls swapped so the requested 1NT shows both majors.
 fn strong_club_defense() -> Rules {
@@ -164,14 +179,21 @@ fn natural_notrump_opening() -> Cons<impl Constraint + Clone> {
 
 fn direct_suit_defense(opened: Suit) -> Rules {
     let natural = natural_suit_opening(opened);
-    let mut rules = Rules::new()
-        .rule(Call::Double, 500, natural.clone() & takeout_or_strong(12))
-        .alert(TAKEOUT)
-        .rule(
-            bid(1, Strain::Notrump),
-            440,
-            natural.clone() & hcp(15..=18) & balanced() & stopper_in(opened),
-        );
+    let mut rules = if matches!(opened, Suit::Clubs | Suit::Diamonds) {
+        Rules::new().rule(
+            Call::Double,
+            500,
+            natural.clone() & minor_takeout_or_strong(12),
+        )
+    } else {
+        Rules::new().rule(Call::Double, 500, natural.clone() & takeout_or_strong(12))
+    }
+    .alert(TAKEOUT)
+    .rule(
+        bid(1, Strain::Notrump),
+        440,
+        natural.clone() & hcp(15..=18) & balanced() & stopper_in(opened),
+    );
 
     for suit in Suit::ASC {
         if suit == opened {
@@ -200,7 +222,7 @@ fn direct_suit_defense(opened: Suit) -> Rules {
                 250,
                 natural.clone()
                     & len(suit, 6..)
-                    & hcp(5..=9)
+                    & preempt_strength(suit)
                     & min_level_is(level - 1, Strain::from(suit)),
             );
         }
@@ -308,6 +330,53 @@ fn overcall_advances(opened: Suit, overcall: Bid) -> Rules {
         }
     }
     rules
+}
+
+fn doubled_overcall_advances(opened: Suit, overcall: Bid) -> Rules {
+    let Some(our) = overcall.strain.suit() else {
+        return Rules::new();
+    };
+    let mut rules = overcall_advances(opened, overcall)
+        .rule(
+            Call::Redouble,
+            700,
+            hcp(10..) & len(our, 3..) & top_honors(our, 1..),
+        )
+        .alert(BUSINESS)
+        .rule(Call::Pass, 100, len(our, 3..));
+    for suit in Suit::ASC {
+        if suit == opened || suit == our {
+            continue;
+        }
+        for level in 1..=3 {
+            rules = rules.rule(
+                bid(level, Strain::from(suit)),
+                290,
+                hcp(..=7) & len(suit, 5..) & min_level_is(level, Strain::from(suit)),
+            );
+        }
+    }
+    rules
+}
+
+fn overcaller_runout(opened: Suit, overcall: Bid) -> Rules {
+    let Some(our) = overcall.strain.suit() else {
+        return Rules::new();
+    };
+    let mut rules = Rules::new();
+    for suit in Suit::ASC {
+        if suit == opened || suit == our {
+            continue;
+        }
+        for level in 1..=3 {
+            rules = rules.rule(
+                bid(level, Strain::from(suit)),
+                500,
+                len(suit, 5..) & min_level_is(level, Strain::from(suit)),
+            );
+        }
+    }
+    rules.rule(Call::Pass, 100, len(our, 5..))
 }
 
 fn takeout_advances(opened: Suit) -> Rules {
@@ -558,6 +627,43 @@ fn landy_advance() -> Rules {
         )
 }
 
+fn michaels_advance(opened: Suit) -> Rules {
+    if matches!(opened, Suit::Clubs | Suit::Diamonds) {
+        return Rules::new()
+            .rule(
+                bid(2, Strain::Spades),
+                300,
+                longer_suit(Suit::Spades, Suit::Hearts),
+            )
+            .rule(
+                bid(2, Strain::Hearts),
+                290,
+                at_least_as_long(Suit::Hearts, Suit::Spades),
+            );
+    }
+    let other_major = if opened == Suit::Hearts {
+        Suit::Spades
+    } else {
+        Suit::Hearts
+    };
+    let landing = if opened == Suit::Hearts { 2 } else { 3 };
+    Rules::new()
+        .rule(bid(2, Strain::Notrump), 400, hcp(10..))
+        .alert(MICHAELS_ASK)
+        .rule(bid(landing, Strain::from(other_major)), 100, hcp(0..))
+}
+
+fn unusual_advance(opened: Suit) -> Rules {
+    let (low, high) = match opened {
+        Suit::Clubs => (Suit::Diamonds, Suit::Hearts),
+        Suit::Diamonds => (Suit::Clubs, Suit::Hearts),
+        Suit::Hearts | Suit::Spades => (Suit::Clubs, Suit::Diamonds),
+    };
+    Rules::new()
+        .rule(bid(3, Strain::from(high)), 300, longer_suit(high, low))
+        .rule(bid(3, Strain::from(low)), 290, at_least_as_long(low, high))
+}
+
 fn strong_club_major_advance() -> Rules {
     let artificial = artificial_strong_club();
     Rules::new()
@@ -633,7 +739,40 @@ fn entries(_: &Agreements) -> Vec<Entry> {
                 Pattern::node(&format!("{root} {overcall} -")),
                 overcall_advances(opened, overcall),
             ));
+            entries.extend(rows_of(
+                Pattern::node(&format!("{root} {overcall} (X)")),
+                doubled_overcall_advances(opened, overcall),
+            ));
+            entries.extend(rows_of(
+                Pattern::node(&format!("{root} {overcall} (X) P -")),
+                overcaller_runout(opened, overcall),
+            ));
+
+            let jump = bid(level + 1, Strain::from(over));
+            if jump.level.get() <= 3 {
+                entries.extend(rows_of(
+                    Pattern::node(&format!("{root} {jump} -")),
+                    overcall_advances(opened, jump),
+                ));
+                entries.extend(rows_of(
+                    Pattern::node(&format!("{root} {jump} (X)")),
+                    doubled_overcall_advances(opened, jump),
+                ));
+                entries.extend(rows_of(
+                    Pattern::node(&format!("{root} {jump} (X) P -")),
+                    overcaller_runout(opened, jump),
+                ));
+            }
         }
+        let cue = bid(2, Strain::from(opened));
+        entries.extend(rows_of(
+            Pattern::node(&format!("{root} {cue} (X)")),
+            michaels_advance(opened),
+        ));
+        entries.extend(rows_of(
+            Pattern::node(&format!("{root} 2NT (X)")),
+            unusual_advance(opened),
+        ));
         if matches!(opened, Suit::Hearts | Suit::Spades) {
             let other_major = if opened == Suit::Hearts {
                 Suit::Spades
@@ -642,6 +781,13 @@ fn entries(_: &Agreements) -> Vec<Entry> {
             };
             entries.extend(rows_of(
                 Pattern::node(&format!("{root} {} - 2NT -", bid(2, Strain::from(opened)))),
+                michaels_major_ask_answer(other_major),
+            ));
+            entries.extend(rows_of(
+                Pattern::node(&format!(
+                    "{root} {} (X) 2NT -",
+                    bid(2, Strain::from(opened))
+                )),
                 michaels_major_ask_answer(other_major),
             ));
         }
@@ -669,6 +815,7 @@ fn entries(_: &Agreements) -> Vec<Entry> {
     }
     entries.extend(rows_of(Pattern::node("P* (1NT)"), notrump_defense()));
     entries.extend(rows_of(Pattern::node("P* (1NT) 2♣ -"), landy_advance()));
+    entries.extend(rows_of(Pattern::node("P* (1NT) 2♣ (X)"), landy_advance()));
     entries.extend(rows_of(
         Pattern::node("P* (1♣) X - 2♣ -"),
         strong_club_minor_signoff(),

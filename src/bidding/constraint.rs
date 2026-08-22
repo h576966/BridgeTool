@@ -2834,6 +2834,59 @@ pub fn top_honors(
     Cons(TopHonors { suit, range })
 }
 
+/// A specific rank is held in a suit (the [`has_rank`] constraint)
+#[derive(Clone)]
+struct HasRank {
+    suit: Suit,
+    rank: Rank,
+}
+
+impl Constraint for HasRank {
+    fn eval(&self, hand: Hand, _: &Context<'_>) -> f32 {
+        crisp(hand[self.suit].contains(self.rank))
+    }
+
+    fn dependencies(&self) -> ConstraintDependencies {
+        ConstraintDependencies::HAND
+    }
+
+    fn projection_dependencies(&self) -> ProjectionDependencies {
+        ProjectionDependencies::all(ConstraintDependencies::NONE)
+    }
+
+    fn describe(&self) -> Description {
+        Description::atom(format!("{} in {}", self.rank, self.suit))
+    }
+
+    fn project(&self, _: &Context<'_>) -> EnvelopeUnion {
+        let hcp = match self.rank {
+            Rank::A => 4,
+            Rank::K => 3,
+            Rank::Q => 2,
+            Rank::J => 1,
+            _ => 0,
+        };
+        let mut envelope = long_suit_box(
+            self.suit,
+            Range::new(1, Range::FULL_LENGTH.max),
+            Range::FULL_LENGTH,
+        );
+        envelope.strength.hcp = Range::new(hcp, Range::FULL_POINTS.max);
+        envelope.strength.suit_hcp[self.suit as usize] = Range::new(hcp, SUIT_HCP_CAP);
+        EnvelopeUnion::from(envelope)
+    }
+}
+
+/// Require a specific rank in a particular suit.
+///
+/// This is primarily useful for exact, deliberately light suit-quality
+/// agreements such as permitting `Kxxxxx` or `QTxxxx` at unfavorable
+/// vulnerability without treating every two-top-honor holding alike.
+#[must_use]
+pub fn has_rank(suit: Suit, rank: Rank) -> Cons<impl Constraint + Clone> {
+    Cons(HasRank { suit, rank })
+}
+
 /// Whether a holding stops the suit for notrump purposes
 ///
 /// The crisp textbook definition: A, Kx, Qxx, or Jxxx.

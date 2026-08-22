@@ -23,7 +23,8 @@ marked **TBD**.
 - Opening ranges currently use Milton Work high-card points (**HCP**).
 - Once an eight-card or longer trump fit is known, evaluate the hand using HCP,
   trump length, and distribution. The exact distributional scale is **TBD**.
-- Position, vulnerability, suit quality, and judgment adjustments are **TBD**.
+- Position and judgment adjustments remain **TBD** except for the explicit
+  preempt vulnerability and suit-quality agreement below.
 
 ### Forcing terms
 
@@ -56,8 +57,8 @@ marked **TBD**.
 ## Opening structure
 
 The current opening priority is 1NT, 1♦, 1♥, long-minor 2♣/2♦, limited 1♠,
-strong-club-branch 1♠, 1♣, weak twos, and 2NT. Priority matters where shapes
-overlap.
+strong-club-branch 1♠, 1♣, preempts, and 2NT. A seven-card preemptive suit uses
+the three-level rather than a weak two. Priority matters where shapes overlap.
 
 | Call | Meaning | Status |
 | --- | --- | --- |
@@ -69,11 +70,18 @@ overlap.
 | 1NT | 12–15 HCP, 3+ cards in both majors; 4333, 4432, 5332, or 4441 with a singleton minor | Confirmed |
 | 2♣ | 11–15 HCP, 6+ clubs, no four-card major, at most four diamonds | Draft |
 | 2♦ | 11–15 HCP, 6+ diamonds, no four-card major, at most four clubs | Draft |
-| 2♥ / 2♠ | 5–9 HCP and 6+ cards in the opened major | Draft |
+| 2♥ / 2♠ | 5–9 HCP, 6+ cards, and A, K, or Q in the opened major; unfavorable vulnerability uses the stricter rule below | Confirmed |
 | 2NT | 22–24 HCP, balanced | Draft |
-| 3-level openings | Preemptive requirements | TBD |
+| 3♣ / 3♦ / 3♥ / 3♠ | 5–9 HCP, 7+ cards, and the same suit-quality/vulnerability rule as a weak two | Confirmed |
 | 3NT | A running major | Exact requirements TBD |
 | Higher openings | — | TBD |
+
+At normal or favorable vulnerability, a weak two or three-level preempt needs
+at least one of the ace, king, or queen in its suit. Vulnerable against
+non-vulnerable opponents, it needs 7–9 HCP and either the ace, the king, or
+queen-jack/queen-ten in the suit. Thus `Kxxxxx` is acceptable at the stricter
+vulnerability when the hand has 7–9 HCP; bare `Qxxxxx` is not. The same gate
+applies to weak jump overcalls.
 
 ### The two meanings of 1♠
 
@@ -113,6 +121,49 @@ must be decent opposite a balanced 16 HCP minimum.
 
 With equal positive majors, the current implementation chooses hearts. The
 partnership tie-break is **TBD**.
+
+#### After a natural one-level overcall
+
+Responder uses negative transfers with 0–8 HCP and 5+ cards in the shown suit.
+The transfer forces opener to act once, but opener need not complete it and may
+show a better natural suit instead.
+
+| Overcall | Double | Next call | Following call |
+| --- | --- | --- | --- |
+| 1♦ | 5+ hearts | 1♥ = 5+ spades | 1♠ = 5+ clubs |
+| 1♥ | 5+ spades | 1♠ = 5+ clubs | 1NT = 5+ diamonds |
+| 1♠ | 5+ hearts | 1NT = 5+ clubs | 2♣ = 5+ diamonds |
+
+When several negative suits qualify, the current draft shows the longest and
+uses the cheapest transfer on an equal-length tie. Pass shows 0–8 without a
+five-card unbid suit, or a positive hand suitable for converting a reopening
+Double for penalties. A passed negative is forcing on opener when fourth hand
+Passes: the opponents' one-level overcall may not be passed out.
+
+Natural positive suit calls remain 9+ HCP and game forcing where space permits.
+The cue-bid is the 9+ game-forcing catch-all when interference displaces the
+normal positive response; 2NT is natural and positive with a stopper where the
+transfer ladder consumes 1NT.
+
+After a negative transfer, opener normally completes with support, bids a
+five-card or longer side suit naturally, or bids notrump with a balanced hand
+and a stopper. A cheap completion is forced when no better description exists
+and therefore does not promise three-card support. Except when 2♣ completes a
+club transfer, an available 2♣ is an artificial 20+ forcing relay.
+
+After `1♣–(one-level suit)–Pass–Pass`, opener uses:
+
+| Call | Meaning | Force |
+| --- | --- | --- |
+| Double | Cooperative/takeout, normally 16–19; responder may convert with a penalty hand | Not forcing |
+| 1NT | 16–19 balanced with a stopper | Not forcing |
+| New suit other than clubs | Natural, 16–19, 5+ cards; commonly 6+ at the two-level | Not forcing |
+| 2♣ | Artificial 20+ hand, any shape | Forcing one round |
+
+The natural 2♣ rebid is not needed here: a 16–19 hand with clubs strictly
+longest opens PEN's strong 1♠ branch, while an equal-length club two-suiter can
+show its other suit. A 20+ club hand starts with the artificial 2♣ relay and
+shows clubs later.
 
 #### Opener after the negative 1♦
 
@@ -200,7 +251,12 @@ between Pass and 2♠, and the exact meaning of 2♠, are **TBD**.
 - The meaning of a direct **4♠** is **TBD**.
 
 After `1♦ (1♥)`, 1♠ is currently natural with 3+ spade support and 6+ HCP.
-Other contested sequences and most opener rebids are **TBD**.
+After `1♦ (1NT)`, 2♠ is a natural, nonforcing competitive raise with 4+
+spades and 6–9 fit-aware support points. Once opener's 4+ spades establish the
+fit, side-suit shortness counts: for example, 4 HCP plus a useful void may be
+enough for 2♠. Whether 3♠ should show five-card support or also allow
+four-card support with extreme shape is **TBD**. Other contested sequences and
+most opener rebids are **TBD**.
 
 ### After 1♥ — 10–15, unbalanced, 4+ hearts, fewer than four spades
 
@@ -784,16 +840,22 @@ strength may justify deviation.
 
 | Call over a natural one-level opening | Meaning |
 | --- | --- |
-| Double | Takeout, normally opening values with support for the unbid suits, especially unbid majors; may instead be any 18+ HCP hand |
+| Double | Takeout, normally opening values with support for the unbid suits, especially unbid majors; may instead be any 17+ raw-HCP hand |
 | One-level suit overcall | Natural, normally 5+ cards and approximately 8–17 HCP |
 | Two-level suit overcall | Natural, approximately 10–17 HCP; normally 6+ cards or a good five-card suit |
 | 1NT | 15–18 HCP, balanced, with a stopper in opener's suit |
-| Jump suit overcall | Weak and preemptive, normally a six-card suit; strength depends on vulnerability |
+| Jump suit overcall | Weak and preemptive, normally a six-card suit; uses the opening-preempt HCP, vulnerability, and suit-quality gate |
 | Direct cue-bid | Michaels |
 | 2NT | Unusual 2NT: the two lowest unbid suits |
 
-With about 18+ HCP and a strong one-suited hand, Double first and then bid the
+With 17+ raw HCP and a strong one-suited hand, Double first and then bid the
 suit. A direct natural overcall is therefore limited.
+
+Over a natural minor, an ordinary 12–16 HCP takeout Double shows at least 3–3
+in the majors, at least one four-card major, and no five-card major. With a
+five-card major, overcall it naturally instead. The separate 17+ any-shape
+Double is measured in raw HCP; distribution does not promote a weaker hand
+into that branch.
 
 The Michaels and Unusual 2NT meanings are:
 
@@ -908,6 +970,30 @@ examples include `1♠–(X)–XX` as the INV+ general ask and the replacement
 transfer Doubles after natural 2♦/2♥ overcalls of 1♠. The current
 `2♦–(X)–XX` transfer to hearts remains Draft until that opening is reviewed.
 
+The current authored application is deliberately general rather than a list of
+hand-by-hand rescues:
+
+- after doubled 1♣, 1♦, and 1♥ artificial openings, the normal response
+  structure remains on; after a doubled negative response or relay, opener
+  still makes the normal required rebid;
+- after a doubled natural 2♣, 2♥, or 2♠ opening, responder may Redouble with
+  genuine business values, raise with support, or show a five-card alternative;
+  if responder Passes and fourth hand Passes, opener runs only with a second
+  five-card suit;
+- after a doubled natural overcall, normal advances remain available, a sound
+  Redouble is business, and a weak advancer may show a five-card alternative;
+  after Pass–Pass, overcaller runs only with a second five-card suit;
+- after doubled Landy, Michaels, or Unusual 2NT, advancer chooses an advertised
+  suit (or uses the defined Michaels minor ask); and
+- a doubled splinter or control bid remains forcing until the partnership has
+  reached game in the known trump suit. It may not become the final contract by
+  accident.
+
+In an unauthored competitive continuation, the natural fallback may bid four
+of a major only with a known eight-card fit and at least 25 combined raw HCP,
+or with a known nine-card fit when non-vulnerable against vulnerable opponents.
+An authored game force is exempt from this conservative gate.
+
 ### General low-level Double policy
 
 **Confirmed umbrella rule:** low-level Doubles are takeout or cooperative and
@@ -936,12 +1022,14 @@ penalty conversion are **TBD**.
 
 The following competitive areas still need explicit agreements:
 
-- responses and rebids after interference over 1♣, 1♦, and 1♥;
+- interference above the one-level over 1♣, and responses and rebids after
+  interference over 1♦ and 1♥;
 - interference over an artificial ask or transfer after responder has acted;
 - detailed continuations after overcalls, takeout Doubles, and preemptive
   openings;
 - defenses to artificial and multi-meaning openings other than a strong 1♣;
-- vulnerability- and position-dependent adjustments.
+- vulnerability- and position-dependent adjustments outside the confirmed
+  preempt gate.
 
 ## Questions to complete next
 
@@ -960,7 +1048,7 @@ The following competitive areas still need explicit agreements:
 11. Competitive structure after opponents disturb 1♥.
 12. Exact penalty-double and penalty-conversion requirements, including
     conversion of a negative/cooperative Double after interference over 1NT.
-13. Three-level preempts and the running-major 3NT opening.
+13. The running-major 3NT opening.
 14. Natural suit-oriented acceptances of quantitative 4NT, trump selection
     when more than one fit is agreed, and non-jump five-level controls.
 15. Defenses to artificial and multi-meaning openings, plus the exact Transfer

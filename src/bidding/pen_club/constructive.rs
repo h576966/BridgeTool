@@ -37,7 +37,7 @@ fn positive_major_shape(major: Suit) -> Cons<impl Constraint + Clone> {
         | (len(major, 4..=4) & (marmic() | len(Suit::Clubs, 5..=5) | len(Suit::Diamonds, 5..=5)))
 }
 
-fn one_club_responses() -> Rules {
+pub(super) fn one_club_responses() -> Rules {
     // The source gives no tie-break for equal positive majors. The draft bids
     // hearts on equal length and records that choice as an open system question.
     Rules::new()
@@ -89,7 +89,7 @@ fn one_club_responses() -> Rules {
         .alert(ONE_CLUB_NEGATIVE)
 }
 
-fn one_club_negative_rebids() -> Rules {
+pub(super) fn one_club_negative_rebids() -> Rules {
     Rules::new()
         .rule(bid(2, Strain::Notrump), 500, hcp(25..) & balanced())
         .rule(
@@ -132,7 +132,7 @@ fn one_club_negative_rebids() -> Rules {
         )
 }
 
-fn one_club_positive_major_rebids(major: Suit) -> Rules {
+pub(super) fn one_club_positive_major_rebids(major: Suit) -> Rules {
     let other = if major == Suit::Hearts {
         Suit::Spades
     } else {
@@ -176,7 +176,7 @@ fn one_club_supported_major(major: Suit) -> Rules {
         )
 }
 
-fn one_club_minor_rebids(minor: Suit) -> Rules {
+pub(super) fn one_club_minor_rebids(minor: Suit) -> Rules {
     let mut rules = Rules::new()
         .rule(bid(3, Strain::from(minor)), 400, len(minor, 3..))
         .rule(
@@ -247,7 +247,7 @@ pub(super) fn one_diamond_responses() -> Rules {
         ))
 }
 
-fn one_diamond_heart_rebid() -> Rules {
+pub(super) fn one_diamond_heart_rebid() -> Rules {
     Rules::new()
         .rule(bid(1, Strain::Notrump), 200, len(Suit::Hearts, 3..=3))
         .alert(THREE_CARD_SUPPORT)
@@ -282,7 +282,7 @@ fn one_diamond_spade_rebids() -> Rules {
         )
 }
 
-fn one_heart_responses() -> Rules {
+pub(super) fn one_heart_responses() -> Rules {
     Rules::new()
         .rule(
             bid(3, Strain::Notrump),
@@ -348,7 +348,7 @@ fn one_heart_responses() -> Rules {
         ))
 }
 
-fn heart_relay_rebids() -> Rules {
+pub(super) fn heart_relay_rebids() -> Rules {
     Rules::new()
         .rule(
             bid(3, Strain::Spades),

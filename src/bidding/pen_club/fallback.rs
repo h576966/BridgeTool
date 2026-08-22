@@ -9,7 +9,7 @@ use crate::bidding::inference::relative_of;
 use crate::bidding::instinct::instinct;
 use crate::bidding::trie::Classifier;
 use crate::bidding::{Rules, System};
-use contract_bridge::auction::Call;
+use contract_bridge::auction::{Call, RelativeVulnerability};
 use contract_bridge::{Bid, Hand, Rank, Strain, Suit, eval};
 use std::cmp::Reverse;
 use std::sync::Arc;
@@ -95,6 +95,18 @@ fn known_game_force(hand: Hand, context: &Context<'_>) -> bool {
     {
         return true;
     }
+    if (opening == bid(1, Strain::Diamonds)
+        && [
+            bid(4, Strain::Clubs),
+            bid(4, Strain::Diamonds),
+            bid(4, Strain::Hearts),
+        ]
+        .contains(&response))
+        || (opening == bid(1, Strain::Hearts)
+            && [bid(4, Strain::Clubs), bid(4, Strain::Diamonds)].contains(&response))
+    {
+        return true;
+    }
     if opening == bid(1, Strain::Spades) {
         if response == bid(2, Strain::Notrump) {
             return true;
@@ -158,6 +170,11 @@ fn known_game_force(hand: Hand, context: &Context<'_>) -> bool {
 }
 
 fn below_game(context: &Context<'_>) -> bool {
+    if let Some(trump) = publicly_agreed_trump(context) {
+        return context
+            .last_bid()
+            .is_none_or(|shown| shown < game_bid(trump));
+    }
     context.last_bid().is_none_or(|bid| match bid.strain {
         Strain::Clubs | Strain::Diamonds => bid.level.get() < 5,
         Strain::Hearts | Strain::Spades => bid.level.get() < 4,
@@ -186,6 +203,27 @@ fn call_available(context: &Context<'_>, candidate: Bid) -> bool {
 }
 
 fn publicly_agreed_trump(context: &Context<'_>) -> Option<Suit> {
+    let bids = our_bids(context);
+    if let Some((&opening, rest)) = bids.split_first()
+        && let Some(&response) = rest.first()
+    {
+        if opening == bid(1, Strain::Diamonds)
+            && [
+                bid(4, Strain::Clubs),
+                bid(4, Strain::Diamonds),
+                bid(4, Strain::Hearts),
+            ]
+            .contains(&response)
+        {
+            return Some(Suit::Spades);
+        }
+        if opening == bid(1, Strain::Hearts)
+            && [bid(4, Strain::Clubs), bid(4, Strain::Diamonds)].contains(&response)
+        {
+            return Some(Suit::Hearts);
+        }
+    }
+
     let inferences = context.inferences();
     let partnership_bids = our_indexed_bids(context);
     Suit::ASC
@@ -585,6 +623,13 @@ fn above_game(bid: Bid) -> bool {
 }
 
 fn add_legal_game_signoff(logits: &mut Logits, context: &Context<'_>) {
+    if let Some(trump) = publicly_agreed_trump(context) {
+        let target = game_bid(trump);
+        if call_available(context, target) {
+            logits.0[Call::Bid(target)] = 0.0;
+            return;
+        }
+    }
     for target in [
         bid(3, Strain::Notrump),
         bid(4, Strain::Hearts),
@@ -600,6 +645,20 @@ fn add_legal_game_signoff(logits: &mut Logits, context: &Context<'_>) {
             return;
         }
     }
+}
+
+fn competitive_major_game_allowed(hand: Hand, context: &Context<'_>, trump: Suit) -> bool {
+    if context.undisturbed() || known_game_force(hand, context) {
+        return true;
+    }
+    let inferences = context.inferences();
+    let partner = inferences.partner();
+    let fit = hand[trump].len() as u8 + partner.length(trump).min;
+    let combined_hcp = hcp(hand).saturating_add(partner.strength.hcp.min);
+    let vul = context.vul();
+    let favorable =
+        !vul.contains(RelativeVulnerability::WE) && vul.contains(RelativeVulnerability::THEY);
+    (fit >= 8 && combined_hcp >= 25) || (fit >= 9 && favorable)
 }
 
 impl Classifier for PenSafeNatural {
@@ -622,6 +681,12 @@ impl Classifier for PenSafeNatural {
         let force = known_game_force(hand, context) && below_game(context);
         if force {
             logits.0[Call::Pass] = f32::NEG_INFINITY;
+        }
+
+        for suit in [Suit::Hearts, Suit::Spades] {
+            if !competitive_major_game_allowed(hand, context, suit) {
+                logits.0[Call::Bid(game_bid(suit))] = f32::NEG_INFINITY;
+            }
         }
 
         if !slam_intent(context) {

@@ -34,11 +34,19 @@ pub enum Opening {
     TwoSpades,
     /// 2NT: 22–24 HCP, balanced.
     TwoNotrump,
+    /// 3♣: 5–9 HCP with 7+ clubs and at least one of A/K/Q in clubs.
+    ThreeClubs,
+    /// 3♦: 5–9 HCP with 7+ diamonds and at least one of A/K/Q in diamonds.
+    ThreeDiamonds,
+    /// 3♥: 5–9 HCP with 7+ hearts and at least one of A/K/Q in hearts.
+    ThreeHearts,
+    /// 3♠: 5–9 HCP with 7+ spades and at least one of A/K/Q in spades.
+    ThreeSpades,
 }
 
 impl Opening {
     /// Every opening implemented by this audit, in call order.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 14] = [
         Self::OneClub,
         Self::OneDiamond,
         Self::OneHeart,
@@ -49,6 +57,10 @@ impl Opening {
         Self::TwoHearts,
         Self::TwoSpades,
         Self::TwoNotrump,
+        Self::ThreeClubs,
+        Self::ThreeDiamonds,
+        Self::ThreeHearts,
+        Self::ThreeSpades,
     ];
 }
 
@@ -65,6 +77,10 @@ impl fmt::Display for Opening {
             Self::TwoHearts => "2♥",
             Self::TwoSpades => "2♠",
             Self::TwoNotrump => "2NT",
+            Self::ThreeClubs => "3♣",
+            Self::ThreeDiamonds => "3♦",
+            Self::ThreeHearts => "3♥",
+            Self::ThreeSpades => "3♠",
         })
     }
 }
@@ -195,6 +211,10 @@ pub fn select_opening(hand: Hand) -> OpeningSelection {
         Opening::OneSpade,
         Opening::OneClub,
         Opening::TwoNotrump,
+        Opening::ThreeClubs,
+        Opening::ThreeDiamonds,
+        Opening::ThreeHearts,
+        Opening::ThreeSpades,
     ] {
         if candidates.contains(&opening) {
             return OpeningSelection::Selected(opening);
@@ -265,10 +285,26 @@ fn is_eligible(opening: Opening, facts: &HandFacts) -> bool {
         Opening::OneNotrump => is_one_notrump(facts),
         Opening::TwoClubs => hcp_11_to_15 && is_long_minor(facts, Suit::Clubs),
         Opening::TwoDiamonds => hcp_11_to_15 && is_long_minor(facts, Suit::Diamonds),
-        Opening::TwoHearts => (5..=9).contains(&facts.hcp) && facts.length(Suit::Hearts) >= 6,
-        Opening::TwoSpades => (5..=9).contains(&facts.hcp) && facts.length(Suit::Spades) >= 6,
+        Opening::TwoHearts => {
+            (5..=9).contains(&facts.hcp)
+                && facts.length(Suit::Hearts) >= 6
+                && facts.suit_hcp[Suit::Hearts as usize] >= 2
+        }
+        Opening::TwoSpades => {
+            (5..=9).contains(&facts.hcp)
+                && facts.length(Suit::Spades) >= 6
+                && facts.suit_hcp[Suit::Spades as usize] >= 2
+        }
         Opening::TwoNotrump => is_two_notrump(facts),
+        Opening::ThreeClubs => is_three_level_preempt(facts, Suit::Clubs),
+        Opening::ThreeDiamonds => is_three_level_preempt(facts, Suit::Diamonds),
+        Opening::ThreeHearts => is_three_level_preempt(facts, Suit::Hearts),
+        Opening::ThreeSpades => is_three_level_preempt(facts, Suit::Spades),
     }
+}
+
+fn is_three_level_preempt(facts: &HandFacts, suit: Suit) -> bool {
+    (5..=9).contains(&facts.hcp) && facts.length(suit) >= 7 && facts.suit_hcp[suit as usize] >= 2
 }
 
 fn is_one_notrump(facts: &HandFacts) -> bool {
